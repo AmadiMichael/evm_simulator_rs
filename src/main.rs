@@ -111,15 +111,12 @@ fn checks(log: &Log) -> Option<SimulatedInfo> {
     let checked_topics: [H256; 2] = [approval, transfer];
 
     if checked_topics.contains(&log.topics[0]) {
-        let mut amount: U256 = U256([0, 0, 0, 0]);
         let decoded = decode_whole(&[ParamType::Uint(256)], &log.data).unwrap();
 
-        for token in decoded.iter() {
-            amount = match token {
-                Token::Uint(x) => *x,
-                _ => panic!("Wrong type decoded")
-            }
-        }
+        let amount = match decoded[0] {
+            Token::Uint(x) => x,
+            _ => panic!("Wrong type decoded")
+        };
 
         if approval == log.topics[0] {
             Some(SimulatedInfo { operation: Operation::Approval, token: log.address, from: Address::from(log.topics[1]), to: Address::from(log.topics[2]), amount: amount })
