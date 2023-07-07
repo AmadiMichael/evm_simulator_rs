@@ -1,11 +1,13 @@
 use ethers::{
+    prelude::{abigen},
     core::{types::TransactionRequest, utils::Anvil},
     providers::{Http, Middleware, Provider},
-    types::{Bytes, Address, U256, H256, Log}, utils::{parse_ether}, abi::{decode_whole, ParamType, Token},
+    types::{Bytes, Address, U256, H256, Log}, utils::{parse_ether, format_units}, abi::{decode_whole, ParamType, Token},
 };
 use eyre::Result;
 use std::convert::TryFrom;
 use dotenv::dotenv;
+use std::sync::Arc;
 
 #[derive(Debug)]
 enum Operation {
@@ -43,7 +45,7 @@ async fn simulate(from: &str, to: &str, data: &str, value: u64, block_number: u6
     let alchemy_api_key = std::env::var("ALCHEMY_API_KEY").expect("ALCHEMY_API_KEY must be set.");
     let rpc_url: &str = &("https://eth-mainnet.g.alchemy.com/v2/".to_owned() + &alchemy_api_key); // "http://127.0.0.1:8545"; //
     let anvil = Anvil::new().fork(rpc_url).fork_block_number(block_number).spawn();
-    let provider = Provider::<Http>::try_from(anvil.endpoint()).expect("could not instantiate HTTP Provider");;
+    let provider = Provider::<Http>::try_from(anvil.endpoint()).expect("could not instantiate HTTP Provider");
 
 
     // convert to required types and revert if any fails
@@ -81,13 +83,18 @@ async fn simulate(from: &str, to: &str, data: &str, value: u64, block_number: u6
     }
 
     for (index, simulated_info) in simulated_infos.iter().enumerate() {
+        let (name, symbol, decimals) = get_token_name_and_symbol(simulated_info.token, &provider).await;
+        let decimals: u32 = decimals.to_string().parse()?;
+        let amount = format_units(simulated_info.amount, decimals).unwrap();
+
         println!("detected {index}: 
                                     Opeartion: {:?},
-                                    Token: {:?},
+                                    Token Address: {:?}: 
+                                    Token Name, Symbol, Decimals: {name:?}, {symbol:?}, {decimals:?},
                                     From: {:?},
                                     To: {:?},
                                     Amount: {:?}", 
-                                    simulated_info.operation, simulated_info.token, simulated_info.from, simulated_info.to, simulated_info.amount);
+                                    simulated_info.operation, simulated_info.token, simulated_info.from, simulated_info.to, amount);
     }
 
     // stop impersonate address
@@ -125,6 +132,22 @@ fn checks(log: &Log) -> Option<SimulatedInfo> {
 }
 
 
-// fn get_token_name_and_symbol(addr: Address, provider: Provider<Provider>) -> (String, String) {
+async fn get_token_name_and_symbol(address: Address, provider: &Provider<Http>) -> (String, String, U256){
+    abigen!(
+        IERC20,
+        r#"[
+            function name() external view returns (string)
+            function symbol() external view returns (string)
+            function decimals() external view returns (uint256)
+        ]"#,
+    );
 
-// }
+    let client = Arc::new(provider);
+    let contract = IERC20::new(address, client);
+
+    let name = contract.name().call().await;
+    let symbol = contract.symbol().call().await;
+    let decimals = contract.decimals().call().await;
+
+    (name.unwrap().to_owned(), symbol.unwrap().to_owned(), decimals.unwrap())
+}
