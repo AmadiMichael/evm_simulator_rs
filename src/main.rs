@@ -9,6 +9,7 @@ use std::convert::TryFrom;
 use dotenv::dotenv;
 use std::sync::Arc;
 
+
 #[derive(Debug)]
 enum Operation {
     Approval,
@@ -41,12 +42,12 @@ async fn main() -> Result<()> {
 }
 
 async fn simulate(from: &str, to: &str, data: &str, value: u64, block_number: u64) -> Result<()> {
+    println!("Starting simulation...");
     dotenv().ok();
     let alchemy_api_key = std::env::var("ALCHEMY_API_KEY").expect("ALCHEMY_API_KEY must be set.");
     let rpc_url: &str = &("https://eth-mainnet.g.alchemy.com/v2/".to_owned() + &alchemy_api_key); // "http://127.0.0.1:8545"; //
     let anvil = Anvil::new().fork(rpc_url).fork_block_number(block_number).spawn();
     let provider = Provider::<Http>::try_from(anvil.endpoint()).expect("could not instantiate HTTP Provider");
-
 
     // convert to required types and revert if any fails
     let from: Address = from.parse()?;
@@ -71,7 +72,6 @@ async fn simulate(from: &str, to: &str, data: &str, value: u64, block_number: u6
 
     let logs = receipt.logs;
     // println!("logs: {:?}", logs);
-
 
     let mut simulated_infos: Vec<SimulatedInfo> = Vec::new();
 
@@ -142,9 +142,11 @@ async fn get_token_name_and_symbol(address: Address, provider: &Provider<Http>) 
     let client = Arc::new(provider);
     let contract = IERC20::new(address, client);
 
-    let name = contract.name().call().await;
-    let symbol = contract.symbol().call().await;
-    let decimals = contract.decimals().call().await;
+    let name: String = contract.name().call().await.unwrap();
+    let symbol: String = contract.symbol().call().await.unwrap();
+    let decimals: U256 = contract.decimals().call().await.unwrap();
 
-    (name.unwrap().to_owned(), symbol.unwrap().to_owned(), decimals.unwrap())
+    (name.to_owned(), symbol.to_owned(), decimals)
 }
+
+
