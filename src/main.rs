@@ -1,14 +1,16 @@
 use ethers::{
-    prelude::{abigen},
+    abi::{decode_whole, ParamType, Token},
+    contract::Multicall,
     core::{types::TransactionRequest, utils::Anvil},
+    prelude::abigen,
     providers::{Http, Middleware, Provider},
-    types::{Bytes, Address, U256, H256, Log}, utils::{parse_ether, format_units}, abi::{decode_whole, ParamType, Token},
+    types::{Address, Bytes, Log, H256, U256},
+    utils::{format_units, parse_ether},
 };
+use dotenv::dotenv;
 use eyre::Result;
 use std::convert::TryFrom;
-use dotenv::dotenv;
 use std::sync::Arc;
-
 
 #[derive(Debug)]
 enum Operation {
@@ -17,9 +19,17 @@ enum Operation {
 }
 
 #[derive(Debug)]
+struct TokenInfo {
+    address: Address,
+    name: String,
+    symbol: String,
+    decimals: U256,
+}
+
+#[derive(Debug)]
 struct SimulatedInfo {
     operation: Operation,
-    token: Address,
+    token_info: TokenInfo,
     from: Address,
     to: Address,
     amount: U256,
@@ -46,8 +56,12 @@ async fn simulate(from: &str, to: &str, data: &str, value: u64, block_number: u6
     dotenv().ok();
     let alchemy_api_key = std::env::var("ALCHEMY_API_KEY").expect("ALCHEMY_API_KEY must be set.");
     let rpc_url: &str = &("https://eth-mainnet.g.alchemy.com/v2/".to_owned() + &alchemy_api_key); // "http://127.0.0.1:8545"; //
-    let anvil = Anvil::new().fork(rpc_url).fork_block_number(block_number).spawn();
-    let provider = Provider::<Http>::try_from(anvil.endpoint()).expect("could not instantiate HTTP Provider");
+    let anvil = Anvil::new()
+        .fork(rpc_url)
+        .fork_block_number(block_number)
+        .spawn();
+    let provider =
+        Provider::<Http>::try_from(anvil.endpoint()).expect("could not instantiate HTTP Provider");
 
     // convert to required types and revert if any fails
     let from: Address = from.parse()?;
@@ -58,13 +72,19 @@ async fn simulate(from: &str, to: &str, data: &str, value: u64, block_number: u6
     provider.request("anvil_impersonateAccount", [from]).await?;
 
     // setup tx
-    let tx = TransactionRequest::new().from(from).to(to).value(parse_ether(value)?).data(data);
+    let tx = TransactionRequest::new()
+        .from(from)
+        .to(to)
+        .value(parse_ether(value)?)
+        .data(data);
 
     // send tx
     let pending_tx = provider.send_transaction(tx, None).await?;
 
     // await and get receipt and tx
-    let receipt = pending_tx.await?.ok_or_else(|| eyre::format_err!("Failed"))?;
+    let receipt = pending_tx
+        .await?
+        .ok_or_else(|| eyre::format_err!("Failed"))?;
     // let tx = provider.get_transaction(receipt.transaction_hash).await?;
 
     // println!("tx: {:?}", serde_json::to_string(&tx)?);
@@ -76,60 +96,103 @@ async fn simulate(from: &str, to: &str, data: &str, value: u64, block_number: u6
     let mut simulated_infos: Vec<SimulatedInfo> = Vec::new();
 
     for log in logs.iter() {
-        match checks(log) {
-            Some(x) => simulated_infos.push(x),
-            None => {}
+        match checks(log, provider.clone()).await {
+            Ok(Some(x)) => simulated_infos.push(x),
+            Ok(None) => {}
+            Err(err) => panic!("{}", err),
         }
     }
 
     for (index, simulated_info) in simulated_infos.iter().enumerate() {
-        let (name, symbol, decimals) = get_token_name_and_symbol(simulated_info.token, &provider).await;
-        let decimals: u32 = decimals.to_string().parse()?;
+        let decimals: u32 = simulated_info.token_info.decimals.to_string().parse()?;
         let amount = format_units(simulated_info.amount, decimals).unwrap();
 
-        println!("detected {index}: 
+        println!(
+            "detected {index}: 
                                     Opeartion: {:?},
-                                    Token Address: {:?}: 
-                                    Token Name, Symbol, Decimals: {name:?}, {symbol:?}, {decimals:?},
+                                    Token Info:
+                                        Address: {:?},  
+                                        Token Name: {:?}, 
+                                        Symbol: {:?}, 
+                                        Decimals: {:?},
                                     From: {:?},
                                     To: {:?},
-                                    Amount: {:?}", 
-                                    simulated_info.operation, simulated_info.token, simulated_info.from, simulated_info.to, amount);
+                                    Amount: {:?}",
+            simulated_info.operation,
+            simulated_info.token_info.address,
+            simulated_info.token_info.name,
+            simulated_info.token_info.symbol,
+            simulated_info.token_info.decimals,
+            simulated_info.from,
+            simulated_info.to,
+            amount
+        );
     }
 
     // stop impersonate address
-    provider.request("anvil_stopImpersonatingAccount", [from]).await?;
-
+    provider
+        .request("anvil_stopImpersonatingAccount", [from])
+        .await?;
 
     Ok(())
 }
 
-
-fn checks(log: &Log) -> Option<SimulatedInfo> {
-    let approval: H256 = "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925".parse().unwrap();
-    let transfer: H256 = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef".parse().unwrap();
+async fn checks(log: &Log, provider: Provider<Http>) -> Result<Option<SimulatedInfo>> {
+    let approval: H256 =
+        "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925".parse()?;
+    let transfer: H256 =
+        "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef".parse()?;
     let checked_topics: [H256; 2] = [approval, transfer];
 
     if checked_topics.contains(&log.topics[0]) {
-        let decoded = decode_whole(&[ParamType::Uint(256)], &log.data).unwrap();
+        let decoded = match decode_whole(&[ParamType::Uint(256)], &log.data) {
+            Ok(x) => x,
+            Err(err) => panic!("decoding failed with err: {}", err),
+        };
 
         let amount = match decoded[0] {
             Token::Uint(x) => x,
-            _ => panic!("Wrong type decoded")
+            _ => panic!("Wrong type decoded"),
         };
 
+        let (name, symbol, decimals) = get_token_name_and_symbol(log.address, provider).await?;
+
         if approval == log.topics[0] {
-            Some(SimulatedInfo { operation: Operation::Approval, token: log.address, from: Address::from(log.topics[1]), to: Address::from(log.topics[2]), amount: amount })
+            Ok(Some(SimulatedInfo {
+                operation: Operation::Approval,
+                token_info: TokenInfo {
+                    name,
+                    symbol,
+                    decimals,
+                    address: log.address,
+                },
+                from: Address::from(log.topics[1]),
+                to: Address::from(log.topics[2]),
+                amount,
+            }))
         } else {
-            Some(SimulatedInfo { operation: Operation::Transfer, token: log.address, from: Address::from(log.topics[1]), to: Address::from(log.topics[2]), amount: amount })
+            Ok(Some(SimulatedInfo {
+                operation: Operation::Transfer,
+                token_info: TokenInfo {
+                    name,
+                    symbol,
+                    decimals,
+                    address: log.address,
+                },
+                from: Address::from(log.topics[1]),
+                to: Address::from(log.topics[2]),
+                amount,
+            }))
         }
     } else {
-        None
+        Ok(None)
     }
 }
 
-
-async fn get_token_name_and_symbol(address: Address, provider: &Provider<Http>) -> (String, String, U256){
+async fn get_token_name_and_symbol(
+    address: Address,
+    provider: Provider<Http>,
+) -> Result<(String, String, U256)> {
     abigen!(
         IERC20,
         r#"[
@@ -140,13 +203,23 @@ async fn get_token_name_and_symbol(address: Address, provider: &Provider<Http>) 
     );
 
     let client = Arc::new(provider);
-    let contract = IERC20::new(address, client);
+    let contract = IERC20::new(address, client.clone());
 
-    let name: String = contract.name().call().await.unwrap();
-    let symbol: String = contract.symbol().call().await.unwrap();
-    let decimals: U256 = contract.decimals().call().await.unwrap();
+    let name = contract.method::<_, String>("name", ())?;
+    let symbol = contract.method::<_, String>("symbol", ())?;
+    let decimals = contract.method::<_, U256>("decimals", ())?;
 
-    (name.to_owned(), symbol.to_owned(), decimals)
+    let mut multicall = Multicall::new(client, None).await?;
+    multicall
+        .add_call(name, true)
+        .add_call(symbol, true)
+        .add_call(decimals, true);
+
+    // `await`ing on the `call` method lets us fetch the return values of both the above calls in one single RPC call
+    let (name, symbol, decimals): (String, String, U256) = match multicall.call().await {
+        Ok((a, b, c)) => (a, b, c),
+        Err(_) => ("".to_owned(), "".to_owned(), U256::from_dec_str("0")?),
+    };
+
+    Ok((name.to_owned(), symbol.to_owned(), decimals))
 }
-
-
