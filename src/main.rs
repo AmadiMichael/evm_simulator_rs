@@ -17,10 +17,20 @@ enum Operation {
     Approval,
     Transfer,
     ApprovalForAll,
+    TransferSingle,
+    TransferBatch,
+}
+
+#[derive(Debug)]
+enum Standard {
+    // This is mostly to specify eip1155 contracts but can be expanded to specify eip20 and 721 contracts later
+    NONE,
+    Eip1155,
 }
 
 #[derive(Debug)]
 struct TokenInfo {
+    standard: Standard,
     address: Address,
     name: String,
     symbol: String,
@@ -33,6 +43,7 @@ struct SimulatedInfo {
     token_info: TokenInfo,
     from: Address,
     to: Address,
+    id: Option<U256>,
     amount: U256,
 }
 
@@ -50,7 +61,13 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn simulate(from: String, to: String, data: String, value: u64, block_number: u64) -> Result<()> {
+async fn simulate(
+    from: String,
+    to: String,
+    data: String,
+    value: u64,
+    block_number: u64,
+) -> Result<()> {
     println!("Starting simulation...");
     dotenv().ok();
     let alchemy_api_key = std::env::var("ALCHEMY_API_KEY").expect("ALCHEMY_API_KEY must be set.");
@@ -105,25 +122,33 @@ async fn simulate(from: String, to: String, data: String, value: u64, block_numb
     for (index, simulated_info) in simulated_infos.iter().enumerate() {
         let decimals: u32 = simulated_info.token_info.decimals.to_string().parse()?;
         let amount = format_units(simulated_info.amount, decimals).unwrap();
+        let id = match simulated_info.id {
+            Some(x) => format_units(x, 0).unwrap(),
+            None => format_units(0, 0).unwrap(),
+        };
 
         println!(
             "detected {index}: 
-                                    Opeartion: {:?},
+                                    Operation: {:?},
                                     Token Info:
+                                        Standard: {:?},
                                         Address: {:?},  
                                         Token Name: {:?}, 
                                         Symbol: {:?}, 
                                         Decimals: {:?},
                                     From: {:?},
                                     To: {:?},
+                                    id: {:?},
                                     Amount: {:?}",
             simulated_info.operation,
+            simulated_info.token_info.standard,
             simulated_info.token_info.address,
             simulated_info.token_info.name,
             simulated_info.token_info.symbol,
             simulated_info.token_info.decimals,
             simulated_info.from,
             simulated_info.to,
+            id,
             amount
         );
     }
@@ -143,19 +168,44 @@ async fn checks(log: &Log, provider: Provider<Http>) -> Result<Option<SimulatedI
         "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef".parse()?;
     let approval_for_all: H256 =
         "0x17307eab39ab6107e8899845ad3d59bd9653f200f220920489ca2b5937696c31".parse()?;
+    let transfer_single: H256 =
+        "0xc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f62".parse()?;
+    let transfer_batch: H256 =
+        "0x4a39dc06d4c0dbc64b70af90fd698a233a518aa5d07e595d983b8c0526c8f7fb".parse()?;
 
-    let checked_topics: [H256; 3] = [approval, transfer, approval_for_all];
+    let checked_topics: [H256; 5] = [
+        approval,
+        transfer,
+        approval_for_all,
+        transfer_single,
+        transfer_batch,
+    ];
 
     if checked_topics.contains(&log.topics[0]) {
-        let decoded = match decode_whole(&[ParamType::Uint(256)], &log.data) {
-            Ok(x) => x,
-            Err(err) => panic!("decoding failed with err: {}", err),
-        };
+        let amount: U256;
+        let id: U256;
 
-        let amount = match decoded[0] {
-            Token::Uint(x) => x,
-            _ => panic!("Wrong type decoded"),
-        };
+        if &log.data.len() > &32 {
+            let decoded =
+                match decode_whole(&[ParamType::Uint(256), ParamType::Uint(256)], &log.data) {
+                    Ok(x) => x,
+                    Err(err) => panic!("decoding failed with err: {}", err),
+                };
+            (id, amount) = match (&decoded[0], &decoded[1]) {
+                (Token::Uint(x), Token::Uint(y)) => (*x, *y),
+                _ => panic!("Wrong type decoded"),
+            };
+        } else {
+            let decoded = match decode_whole(&[ParamType::Uint(256)], &log.data) {
+                Ok(x) => x,
+                Err(err) => panic!("decoding failed with err: {}", err),
+            };
+            amount = match decoded[0] {
+                Token::Uint(x) => x,
+                _ => panic!("Wrong type decoded"),
+            };
+            id = "0".parse()?;
+        }
 
         let (name, symbol, decimals) = get_token_name_and_symbol(log.address, provider).await?;
 
@@ -163,6 +213,7 @@ async fn checks(log: &Log, provider: Provider<Http>) -> Result<Option<SimulatedI
             Ok(Some(SimulatedInfo {
                 operation: Operation::Approval,
                 token_info: TokenInfo {
+                    standard: Standard::NONE,
                     name,
                     symbol,
                     decimals,
@@ -171,11 +222,13 @@ async fn checks(log: &Log, provider: Provider<Http>) -> Result<Option<SimulatedI
                 from: Address::from(log.topics[1]),
                 to: Address::from(log.topics[2]),
                 amount,
+                id: None,
             }))
         } else if log.topics[0] == transfer {
             Ok(Some(SimulatedInfo {
                 operation: Operation::Transfer,
                 token_info: TokenInfo {
+                    standard: Standard::NONE,
                     name,
                     symbol,
                     decimals,
@@ -184,11 +237,13 @@ async fn checks(log: &Log, provider: Provider<Http>) -> Result<Option<SimulatedI
                 from: Address::from(log.topics[1]),
                 to: Address::from(log.topics[2]),
                 amount,
+                id: None,
             }))
-        } else {
+        } else if log.topics[0] == approval_for_all {
             Ok(Some(SimulatedInfo {
                 operation: Operation::ApprovalForAll,
                 token_info: TokenInfo {
+                    standard: Standard::NONE,
                     name,
                     symbol,
                     decimals,
@@ -197,6 +252,37 @@ async fn checks(log: &Log, provider: Provider<Http>) -> Result<Option<SimulatedI
                 from: Address::from(log.topics[1]),
                 to: Address::from(log.topics[2]),
                 amount,
+                id: None,
+            }))
+        } else if log.topics[0] == transfer_single {
+            Ok(Some(SimulatedInfo {
+                operation: Operation::TransferSingle,
+                token_info: TokenInfo {
+                    standard: Standard::Eip1155,
+                    name,
+                    symbol,
+                    decimals,
+                    address: log.address,
+                },
+                from: Address::from(log.topics[1]),
+                to: Address::from(log.topics[2]),
+                amount,
+                id: Some(id),
+            }))
+        } else {
+            Ok(Some(SimulatedInfo {
+                operation: Operation::TransferBatch,
+                token_info: TokenInfo {
+                    standard: Standard::Eip1155,
+                    name,
+                    symbol,
+                    decimals,
+                    address: log.address,
+                },
+                from: Address::from(log.topics[1]),
+                to: Address::from(log.topics[2]),
+                amount,
+                id: Some(id),
             }))
         }
     } else {
@@ -238,8 +324,6 @@ async fn get_token_name_and_symbol(
 
     Ok((name.to_owned(), symbol.to_owned(), decimals))
 }
-
-
 
 fn return_eip20_test_case() -> (String, String, String, u64, u64) {
     // return a uniswap swap tx data
