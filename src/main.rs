@@ -122,10 +122,6 @@ async fn simulate(
     for (index, simulated_info) in simulated_infos.iter().enumerate() {
         let decimals: u32 = simulated_info.token_info.decimals.to_string().parse()?;
         let amount = format_units(simulated_info.amount, decimals).unwrap();
-        let id = match simulated_info.id {
-            Some(x) => format_units(x, 0).unwrap(),
-            None => format_units(0, 0).unwrap(),
-        };
 
         println!(
             "detected {index}: 
@@ -148,7 +144,7 @@ async fn simulate(
             simulated_info.token_info.decimals,
             simulated_info.from,
             simulated_info.to,
-            id,
+            simulated_info.id,
             amount
         );
     }
@@ -183,7 +179,7 @@ async fn checks(log: &Log, provider: Provider<Http>) -> Result<Option<SimulatedI
 
     if checked_topics.contains(&log.topics[0]) {
         let amount: U256;
-        let id: U256;
+        let id: Option<U256>;
 
         if &log.data.len() > &32 {
             let decoded =
@@ -192,7 +188,7 @@ async fn checks(log: &Log, provider: Provider<Http>) -> Result<Option<SimulatedI
                     Err(err) => panic!("decoding failed with err: {}", err),
                 };
             (id, amount) = match (&decoded[0], &decoded[1]) {
-                (Token::Uint(x), Token::Uint(y)) => (*x, *y),
+                (Token::Uint(x), Token::Uint(y)) => (Some(*x), *y),
                 _ => panic!("Wrong type decoded"),
             };
         } else {
@@ -204,7 +200,7 @@ async fn checks(log: &Log, provider: Provider<Http>) -> Result<Option<SimulatedI
                 Token::Uint(x) => x,
                 _ => panic!("Wrong type decoded"),
             };
-            id = "0".parse()?;
+            id = None;
         }
 
         let (name, symbol, decimals) = get_token_name_and_symbol(log.address, provider).await?;
@@ -222,7 +218,7 @@ async fn checks(log: &Log, provider: Provider<Http>) -> Result<Option<SimulatedI
                 from: Address::from(log.topics[1]),
                 to: Address::from(log.topics[2]),
                 amount,
-                id: None,
+                id,
             }))
         } else if log.topics[0] == transfer {
             Ok(Some(SimulatedInfo {
@@ -237,7 +233,7 @@ async fn checks(log: &Log, provider: Provider<Http>) -> Result<Option<SimulatedI
                 from: Address::from(log.topics[1]),
                 to: Address::from(log.topics[2]),
                 amount,
-                id: None,
+                id,
             }))
         } else if log.topics[0] == approval_for_all {
             Ok(Some(SimulatedInfo {
@@ -252,7 +248,7 @@ async fn checks(log: &Log, provider: Provider<Http>) -> Result<Option<SimulatedI
                 from: Address::from(log.topics[1]),
                 to: Address::from(log.topics[2]),
                 amount,
-                id: None,
+                id,
             }))
         } else if log.topics[0] == transfer_single {
             Ok(Some(SimulatedInfo {
@@ -267,7 +263,7 @@ async fn checks(log: &Log, provider: Provider<Http>) -> Result<Option<SimulatedI
                 from: Address::from(log.topics[1]),
                 to: Address::from(log.topics[2]),
                 amount,
-                id: Some(id),
+                id,
             }))
         } else {
             Ok(Some(SimulatedInfo {
@@ -282,7 +278,7 @@ async fn checks(log: &Log, provider: Provider<Http>) -> Result<Option<SimulatedI
                 from: Address::from(log.topics[1]),
                 to: Address::from(log.topics[2]),
                 amount,
-                id: Some(id),
+                id,
             }))
         }
     } else {
