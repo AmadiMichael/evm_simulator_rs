@@ -5,12 +5,44 @@ use ethers::{
     core::{types::TransactionRequest, utils::Anvil},
     prelude::abigen,
     providers::{Http, Middleware, Provider},
-    types::{Address, Bytes, Log, H256, U256},
+    types::{Address, Bytes, Log, /* H256, */ U256},
     utils::{format_units, parse_ether},
 };
 use eyre::Result;
 use std::convert::TryFrom;
 use std::sync::Arc;
+
+
+
+const APPROVAL: [u8; 32] = [
+    140, 91, 225, 229, 235, 236, 125, 91, 209, 79, 113, 66, 125, 30, 132, 243, 221, 3, 20, 192,
+    247, 178, 41, 30, 91, 32, 10, 200, 199, 195, 185, 37,
+]; // 0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925
+const TRANSFER: [u8; 32] = [
+    221, 242, 82, 173, 27, 226, 200, 155, 105, 194, 176, 104, 252, 55, 141, 170, 149, 43, 167, 241,
+    99, 196, 161, 22, 40, 245, 90, 77, 245, 35, 179, 239,
+]; // 0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef
+const APPROVAL_FOR_ALL: [u8; 32] = [
+    23, 48, 126, 171, 57, 171, 97, 7, 232, 137, 152, 69, 173, 61, 89, 189, 150, 83, 242, 0, 242,
+    32, 146, 4, 137, 202, 43, 89, 55, 105, 108, 49,
+]; // 0x17307eab39ab6107e8899845ad3d59bd9653f200f220920489ca2b5937696c31
+const TRANSFER_SINGLE: [u8; 32] = [
+    195, 213, 129, 104, 197, 174, 115, 151, 115, 29, 6, 61, 91, 191, 61, 101, 120, 84, 66, 115, 67,
+    244, 192, 131, 36, 15, 122, 172, 170, 45, 15, 98,
+]; // 0xc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f62
+const TRANSFER_BATCH: [u8; 32] = [
+    74, 57, 220, 6, 212, 192, 219, 198, 75, 112, 175, 144, 253, 105, 138, 35, 58, 81, 138, 165,
+    208, 126, 89, 93, 152, 59, 140, 5, 38, 200, 247, 251,
+]; // 0x4a39dc06d4c0dbc64b70af90fd698a233a518aa5d07e595d983b8c0526c8f7fb
+
+const CHECKED_TOPICS: [[u8; 32]; 5] = [
+    APPROVAL,
+    TRANSFER,
+    APPROVAL_FOR_ALL,
+    TRANSFER_SINGLE,
+    TRANSFER_BATCH,
+];
+
 
 #[derive(Debug)]
 enum Operation {
@@ -115,7 +147,7 @@ async fn simulate(
         match checks(log, provider.clone()).await {
             Ok(Some(x)) => simulated_infos.push(x),
             Ok(None) => {}
-            Err(err) => panic!("{}", err),
+            Err(err) => panic!("Err {}", err),
         }
     }
 
@@ -158,30 +190,13 @@ async fn simulate(
 }
 
 async fn checks(log: &Log, provider: Provider<Http>) -> Result<Option<SimulatedInfo>> {
-    let approval: H256 =
-        "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925".parse()?;
-    let transfer: H256 =
-        "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef".parse()?;
-    let approval_for_all: H256 =
-        "0x17307eab39ab6107e8899845ad3d59bd9653f200f220920489ca2b5937696c31".parse()?;
-    let transfer_single: H256 =
-        "0xc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f62".parse()?;
-    let transfer_batch: H256 =
-        "0x4a39dc06d4c0dbc64b70af90fd698a233a518aa5d07e595d983b8c0526c8f7fb".parse()?;
+    let topic0: [u8; 32] = log.topics[0].as_bytes().try_into()?;
 
-    let checked_topics: [H256; 5] = [
-        approval,
-        transfer,
-        approval_for_all,
-        transfer_single,
-        transfer_batch,
-    ];
-
-    if checked_topics.contains(&log.topics[0]) {
+    if CHECKED_TOPICS.contains(&topic0) {
         let amount: U256;
         let id: Option<U256>;
 
-        if &log.data.len() > &32 {
+        if log.data.len() > 32 {
             let decoded =
                 match decode_whole(&[ParamType::Uint(256), ParamType::Uint(256)], &log.data) {
                     Ok(x) => x,
@@ -205,8 +220,8 @@ async fn checks(log: &Log, provider: Provider<Http>) -> Result<Option<SimulatedI
 
         let (name, symbol, decimals) = get_token_name_and_symbol(log.address, provider).await?;
 
-        if log.topics[0] == approval {
-            Ok(Some(SimulatedInfo {
+        match topic0 {
+            APPROVAL => Ok(Some(SimulatedInfo {
                 operation: Operation::Approval,
                 token_info: TokenInfo {
                     standard: Standard::NONE,
@@ -219,9 +234,8 @@ async fn checks(log: &Log, provider: Provider<Http>) -> Result<Option<SimulatedI
                 to: Address::from(log.topics[2]),
                 amount,
                 id,
-            }))
-        } else if log.topics[0] == transfer {
-            Ok(Some(SimulatedInfo {
+            })),
+            TRANSFER => Ok(Some(SimulatedInfo {
                 operation: Operation::Transfer,
                 token_info: TokenInfo {
                     standard: Standard::NONE,
@@ -234,9 +248,8 @@ async fn checks(log: &Log, provider: Provider<Http>) -> Result<Option<SimulatedI
                 to: Address::from(log.topics[2]),
                 amount,
                 id,
-            }))
-        } else if log.topics[0] == approval_for_all {
-            Ok(Some(SimulatedInfo {
+            })),
+            APPROVAL_FOR_ALL => Ok(Some(SimulatedInfo {
                 operation: Operation::ApprovalForAll,
                 token_info: TokenInfo {
                     standard: Standard::NONE,
@@ -249,9 +262,8 @@ async fn checks(log: &Log, provider: Provider<Http>) -> Result<Option<SimulatedI
                 to: Address::from(log.topics[2]),
                 amount,
                 id,
-            }))
-        } else if log.topics[0] == transfer_single {
-            Ok(Some(SimulatedInfo {
+            })),
+            TRANSFER_SINGLE => Ok(Some(SimulatedInfo {
                 operation: Operation::TransferSingle,
                 token_info: TokenInfo {
                     standard: Standard::Eip1155,
@@ -264,9 +276,8 @@ async fn checks(log: &Log, provider: Provider<Http>) -> Result<Option<SimulatedI
                 to: Address::from(log.topics[2]),
                 amount,
                 id,
-            }))
-        } else {
-            Ok(Some(SimulatedInfo {
+            })),
+            _ => Ok(Some(SimulatedInfo {
                 operation: Operation::TransferBatch,
                 token_info: TokenInfo {
                     standard: Standard::Eip1155,
@@ -279,7 +290,7 @@ async fn checks(log: &Log, provider: Provider<Http>) -> Result<Option<SimulatedI
                 to: Address::from(log.topics[2]),
                 amount,
                 id,
-            }))
+            })),
         }
     } else {
         Ok(None)
@@ -321,6 +332,9 @@ async fn get_token_name_and_symbol(
     Ok((name.to_owned(), symbol.to_owned(), decimals))
 }
 
+
+
+// test runs
 fn return_eip20_test_case() -> (String, String, String, u64, u64) {
     // return a uniswap swap tx data
 
