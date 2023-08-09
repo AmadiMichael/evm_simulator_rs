@@ -12,8 +12,7 @@ use eyre::Result;
 use std::convert::TryFrom;
 use std::sync::Arc;
 
-
-
+// Constants
 const APPROVAL: [u8; 32] = [
     140, 91, 225, 229, 235, 236, 125, 91, 209, 79, 113, 66, 125, 30, 132, 243, 221, 3, 20, 192,
     247, 178, 41, 30, 91, 32, 10, 200, 199, 195, 185, 37,
@@ -43,7 +42,7 @@ const CHECKED_TOPICS: [[u8; 32]; 5] = [
     TRANSFER_BATCH,
 ];
 
-
+// Types
 #[derive(Debug)]
 enum Operation {
     Approval,
@@ -94,9 +93,9 @@ async fn main() -> Result<()> {
 }
 
 async fn simulate(
-    from: String,
-    to: String,
-    data: String,
+    from: &str,
+    to: &str,
+    data: &str,
     value: u64,
     block_number: u64,
 ) -> Result<()> {
@@ -157,17 +156,17 @@ async fn simulate(
 
         println!(
             "detected {index}: 
-                                    Operation: {:?},
-                                    Token Info:
-                                        Standard: {:?},
-                                        Address: {:?},  
-                                        Token Name: {:?}, 
-                                        Symbol: {:?}, 
-                                        Decimals: {:?},
-                                    From: {:?},
-                                    To: {:?},
-                                    id: {:?},
-                                    Amount: {:?}",
+                                Operation: {:?},
+                                Token Info:
+                                    Standard: {:?},
+                                    Address: {:?},  
+                                    Token Name: {:?}, 
+                                    Symbol: {:?}, 
+                                    Decimals: {:?},
+                                From: {:?},
+                                To: {:?},
+                                id: {:?},
+                                Amount: {:?}",
             simulated_info.operation,
             simulated_info.token_info.standard,
             simulated_info.token_info.address,
@@ -220,80 +219,92 @@ async fn checks(log: &Log, provider: Provider<Http>) -> Result<Option<SimulatedI
 
         let (name, symbol, decimals) = get_token_name_and_symbol(log.address, provider).await?;
 
-        match topic0 {
-            APPROVAL => Ok(Some(SimulatedInfo {
-                operation: Operation::Approval,
-                token_info: TokenInfo {
-                    standard: Standard::NONE,
-                    name,
-                    symbol,
-                    decimals,
-                    address: log.address,
-                },
-                from: Address::from(log.topics[1]),
-                to: Address::from(log.topics[2]),
-                amount,
-                id,
-            })),
-            TRANSFER => Ok(Some(SimulatedInfo {
-                operation: Operation::Transfer,
-                token_info: TokenInfo {
-                    standard: Standard::NONE,
-                    name,
-                    symbol,
-                    decimals,
-                    address: log.address,
-                },
-                from: Address::from(log.topics[1]),
-                to: Address::from(log.topics[2]),
-                amount,
-                id,
-            })),
-            APPROVAL_FOR_ALL => Ok(Some(SimulatedInfo {
-                operation: Operation::ApprovalForAll,
-                token_info: TokenInfo {
-                    standard: Standard::NONE,
-                    name,
-                    symbol,
-                    decimals,
-                    address: log.address,
-                },
-                from: Address::from(log.topics[1]),
-                to: Address::from(log.topics[2]),
-                amount,
-                id,
-            })),
-            TRANSFER_SINGLE => Ok(Some(SimulatedInfo {
-                operation: Operation::TransferSingle,
-                token_info: TokenInfo {
-                    standard: Standard::Eip1155,
-                    name,
-                    symbol,
-                    decimals,
-                    address: log.address,
-                },
-                from: Address::from(log.topics[1]),
-                to: Address::from(log.topics[2]),
-                amount,
-                id,
-            })),
-            _ => Ok(Some(SimulatedInfo {
-                operation: Operation::TransferBatch,
-                token_info: TokenInfo {
-                    standard: Standard::Eip1155,
-                    name,
-                    symbol,
-                    decimals,
-                    address: log.address,
-                },
-                from: Address::from(log.topics[1]),
-                to: Address::from(log.topics[2]),
-                amount,
-                id,
-            })),
-        }
+        match_sim_res(topic0, name, symbol, decimals, amount, id, log)
     } else {
         Ok(None)
+    }
+}
+
+fn match_sim_res(
+    topic0: [u8; 32],
+    name: String,
+    symbol: String,
+    decimals: U256,
+    amount: U256,
+    id: Option<U256>,
+    log: &Log,
+) -> Result<Option<SimulatedInfo>> {
+    match topic0 {
+        APPROVAL => Ok(Some(SimulatedInfo {
+            operation: Operation::Approval,
+            token_info: TokenInfo {
+                standard: Standard::NONE,
+                name,
+                symbol,
+                decimals,
+                address: log.address,
+            },
+            from: Address::from(log.topics[1]),
+            to: Address::from(log.topics[2]),
+            amount,
+            id,
+        })),
+        TRANSFER => Ok(Some(SimulatedInfo {
+            operation: Operation::Transfer,
+            token_info: TokenInfo {
+                standard: Standard::NONE,
+                name,
+                symbol,
+                decimals,
+                address: log.address,
+            },
+            from: Address::from(log.topics[1]),
+            to: Address::from(log.topics[2]),
+            amount,
+            id,
+        })),
+        APPROVAL_FOR_ALL => Ok(Some(SimulatedInfo {
+            operation: Operation::ApprovalForAll,
+            token_info: TokenInfo {
+                standard: Standard::NONE,
+                name,
+                symbol,
+                decimals,
+                address: log.address,
+            },
+            from: Address::from(log.topics[1]),
+            to: Address::from(log.topics[2]),
+            amount,
+            id,
+        })),
+        TRANSFER_SINGLE => Ok(Some(SimulatedInfo {
+            operation: Operation::TransferSingle,
+            token_info: TokenInfo {
+                standard: Standard::Eip1155,
+                name,
+                symbol,
+                decimals,
+                address: log.address,
+            },
+            from: Address::from(log.topics[1]),
+            to: Address::from(log.topics[2]),
+            amount,
+            id,
+        })),
+        _ => Ok(Some(SimulatedInfo {
+            operation: Operation::TransferBatch,
+            token_info: TokenInfo {
+                standard: Standard::Eip1155,
+                name,
+                symbol,
+                decimals,
+                address: log.address,
+            },
+            from: Address::from(log.topics[1]),
+            to: Address::from(log.topics[2]),
+            amount,
+            id,
+        })),
     }
 }
 
@@ -329,30 +340,28 @@ async fn get_token_name_and_symbol(
         Err(_) => ("".to_owned(), "".to_owned(), U256::from_dec_str("0")?),
     };
 
-    Ok((name.to_owned(), symbol.to_owned(), decimals))
+    Ok((name, symbol, decimals))
 }
 
-
-
 // test runs
-fn return_eip20_test_case() -> (String, String, String, u64, u64) {
+fn return_eip20_test_case<'a>() -> (&'a str, &'a str, &'a str, u64, u64) {
     // return a uniswap swap tx data
 
-    let from = "0x448E0F9F42746F6165Dbe6E7B77149bB0F631E6E".to_owned();
-    let to = "0x2Ec705D306b51e486B1bC0D6ebEE708E0661ADd1".to_owned();
-    let data = "0x18cbafe500000000000000000000000000000000000000000000000000394425252270000000000000000000000000000000000000000000000000000035e2b98723e13d00000000000000000000000000000000000000000000000000000000000000a0000000000000000000000000448e0f9f42746f6165dbe6e7b77149bb0f631e6e0000000000000000000000000000000000000000000000000000000064a876b70000000000000000000000000000000000000000000000000000000000000002000000000000000000000000e30bbec87855c8710729e6b8384ef9783c76379c000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2".to_owned();
+    let from = "0x448E0F9F42746F6165Dbe6E7B77149bB0F631E6E";
+    let to = "0x2Ec705D306b51e486B1bC0D6ebEE708E0661ADd1";
+    let data = "0x18cbafe500000000000000000000000000000000000000000000000000394425252270000000000000000000000000000000000000000000000000000035e2b98723e13d00000000000000000000000000000000000000000000000000000000000000a0000000000000000000000000448e0f9f42746f6165dbe6e7b77149bb0f631e6e0000000000000000000000000000000000000000000000000000000064a876b70000000000000000000000000000000000000000000000000000000000000002000000000000000000000000e30bbec87855c8710729e6b8384ef9783c76379c000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
     let value: u64 = 0;
     let block_number: u64 = 17644319;
 
     (from, to, data, value, block_number)
 }
 
-fn return_eip721_test_case() -> (String, String, String, u64, u64) {
+fn return_eip721_test_case<'a>() -> (&'a str, &'a str, &'a str, u64, u64) {
     // return a uniswap swap tx data
 
-    let from = "0x77c5D44F392DD825A073C417EDe8C2f8bce603F6".to_owned();
-    let to = "0x00000000000000ADc04C56Bf30aC9d3c0aAF14dC".to_owned();
-    let data = "0xe7acab24000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000005e00000007b02230091a7ed01230072f7006a004d60a8d4e71d599b8104250f0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000046000000000000000000000000000000000000000000000000000000000000004c00000000000000000000000000b818dc9d41732617dfc5bc8dff03dac632780e1000000000000000000000000000000e7ec00e7b300774b00001314b8610022b80000000000000000000000000000000000000000000000000000000000000160000000000000000000000000000000000000000000000000000000000000022000000000000000000000000000000000000000000000000000000000000000030000000000000000000000000000000000000000000000000000000064ac23690000000000000000000000000000000000000000000000000000000064d501e50000000000000000000000000000000000000000000000000000000000000000360c6ebe0000000000000000000000000000000000000000710e918d59930ae50000007b02230091a7ed01230072f7006a004d60a8d4e71d599b8104250f0000000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000d529ae9e86000000000000000000000000000000000000000000000000000000d529ae9e8600000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000300000000000000000000000076be3b62873462d2142405439777e971754e8e77000000000000000000000000000000000000000000000000000000000000282c000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000020000000000000000000000000b818dc9d41732617dfc5bc8dff03dac632780e10000000000000000000000000000000000000000000000000000000000000001000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005543df729c0000000000000000000000000000000000000000000000000000005543df729c0000000000000000000000000000000a26b00c1f0df003000390027140000faa719000000000000000000000000000000000000000000000000000000000000004059577c8e8707f9b8896a85d4a59a2ef30647fb061287f000079b9fe1e5063474597f9bf2b77700bba355bd813f416da1c12048c8b976a222a3fcdbc92a7887aa000000000000000000000000000000000000000000000000000000000000007e0077c5d44f392dd825a073c417ede8c2f8bce603f60000000064add71eaab1b624b2bf2ba4bc33225f4eb7638e22f73aca43287493a1f63311f6c038a5d8ca9631edb8f32f3696d78963d536359f05834d595295a3189b2c0862236f6900000000000000000000000000000000000000000000000000000000000000282c0000000000000000000000000000000000000000000000000000000000000000000000000000360c6ebe".to_owned();
+    let from = "0x77c5D44F392DD825A073C417EDe8C2f8bce603F6";
+    let to = "0x00000000000000ADc04C56Bf30aC9d3c0aAF14dC";
+    let data = "0xe7acab24000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000005e00000007b02230091a7ed01230072f7006a004d60a8d4e71d599b8104250f0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000046000000000000000000000000000000000000000000000000000000000000004c00000000000000000000000000b818dc9d41732617dfc5bc8dff03dac632780e1000000000000000000000000000000e7ec00e7b300774b00001314b8610022b80000000000000000000000000000000000000000000000000000000000000160000000000000000000000000000000000000000000000000000000000000022000000000000000000000000000000000000000000000000000000000000000030000000000000000000000000000000000000000000000000000000064ac23690000000000000000000000000000000000000000000000000000000064d501e50000000000000000000000000000000000000000000000000000000000000000360c6ebe0000000000000000000000000000000000000000710e918d59930ae50000007b02230091a7ed01230072f7006a004d60a8d4e71d599b8104250f0000000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000d529ae9e86000000000000000000000000000000000000000000000000000000d529ae9e8600000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000300000000000000000000000076be3b62873462d2142405439777e971754e8e77000000000000000000000000000000000000000000000000000000000000282c000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000020000000000000000000000000b818dc9d41732617dfc5bc8dff03dac632780e10000000000000000000000000000000000000000000000000000000000000001000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005543df729c0000000000000000000000000000000000000000000000000000005543df729c0000000000000000000000000000000a26b00c1f0df003000390027140000faa719000000000000000000000000000000000000000000000000000000000000004059577c8e8707f9b8896a85d4a59a2ef30647fb061287f000079b9fe1e5063474597f9bf2b77700bba355bd813f416da1c12048c8b976a222a3fcdbc92a7887aa000000000000000000000000000000000000000000000000000000000000007e0077c5d44f392dd825a073c417ede8c2f8bce603f60000000064add71eaab1b624b2bf2ba4bc33225f4eb7638e22f73aca43287493a1f63311f6c038a5d8ca9631edb8f32f3696d78963d536359f05834d595295a3189b2c0862236f6900000000000000000000000000000000000000000000000000000000000000282c0000000000000000000000000000000000000000000000000000000000000000000000000000360c6ebe";
     let value: u64 = 0;
     let block_number: u64 = 17673303;
 
