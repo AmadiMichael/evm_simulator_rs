@@ -152,7 +152,14 @@ async fn simulate(
 
     for (index, simulated_info) in simulated_infos.iter().enumerate() {
         let decimals: u32 = simulated_info.token_info.decimals.to_string().parse()?;
-        let amount = format_units(simulated_info.amount, decimals).unwrap();
+        let amount = match decimals > 0 {
+            true => format_units(simulated_info.amount, decimals).unwrap(),
+            false => format!("{}", simulated_info.amount)
+        };
+        let id = match simulated_info.id {
+            Some(id) => format!("{}", id),
+            None => "".to_owned(),
+        };
 
         println!(
             "detected {index}: 
@@ -175,7 +182,7 @@ async fn simulate(
             simulated_info.token_info.decimals,
             simulated_info.from,
             simulated_info.to,
-            simulated_info.id,
+            id,
             amount
         );
     }
