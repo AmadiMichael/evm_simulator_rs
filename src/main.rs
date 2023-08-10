@@ -84,13 +84,56 @@ struct SimulatedInfo {
 #[tokio::main]
 async fn main() -> Result<()> {
     let (from, to, data, value, block_number) = return_eip20_test_case();
-    simulate(from, to, data, value, block_number).await?;
+    let sim_result = simulate(from, to, data, value, block_number).await?;
+    let _ = print_result(sim_result);
 
     let (from, to, data, value, block_number) = return_eip721_test_case();
-    simulate(from, to, data, value, block_number).await?;
+    let sim_result = simulate(from, to, data, value, block_number).await?;
+    let _ = print_result(sim_result);
 
     Ok(())
 }
+
+fn print_result(simulated_infos: Vec<SimulatedInfo>) -> Result<()> {
+    for (index, simulated_info) in simulated_infos.iter().enumerate() {
+        let decimals: u32 = simulated_info.token_info.decimals.to_string().parse()?;
+        let amount = match decimals > 0 {
+            true => format_units(simulated_info.amount, decimals).unwrap(),
+            false => format!("{}", simulated_info.amount)
+        };
+        let id = match simulated_info.id {
+            Some(id) => format!("{}", id),
+            None => "".to_owned(),
+        };
+
+        println!(
+            "detected {index}: 
+                                Operation: {:?},
+                                Token Info:
+                                    Standard: {:?},
+                                    Address: {:?},  
+                                    Token Name: {:?}, 
+                                    Symbol: {:?}, 
+                                    Decimals: {:?},
+                                From: {:?},
+                                To: {:?},
+                                id: {:?},
+                                Amount: {:?}",
+            simulated_info.operation,
+            simulated_info.token_info.standard,
+            simulated_info.token_info.address,
+            simulated_info.token_info.name,
+            simulated_info.token_info.symbol,
+            simulated_info.token_info.decimals,
+            simulated_info.from,
+            simulated_info.to,
+            id,
+            amount
+        );
+    }
+    Ok(())
+}
+
 
 async fn simulate(
     from: &str,
@@ -98,7 +141,7 @@ async fn simulate(
     data: &str,
     value: u64,
     block_number: u64,
-) -> Result<()> {
+) -> Result<Vec<SimulatedInfo>> {
     println!("Starting simulation...");
     dotenv().ok();
     let alchemy_api_key = std::env::var("ALCHEMY_API_KEY").expect("ALCHEMY_API_KEY must be set.");
@@ -150,49 +193,12 @@ async fn simulate(
         }
     }
 
-    for (index, simulated_info) in simulated_infos.iter().enumerate() {
-        let decimals: u32 = simulated_info.token_info.decimals.to_string().parse()?;
-        let amount = match decimals > 0 {
-            true => format_units(simulated_info.amount, decimals).unwrap(),
-            false => format!("{}", simulated_info.amount)
-        };
-        let id = match simulated_info.id {
-            Some(id) => format!("{}", id),
-            None => "".to_owned(),
-        };
-
-        println!(
-            "detected {index}: 
-                                Operation: {:?},
-                                Token Info:
-                                    Standard: {:?},
-                                    Address: {:?},  
-                                    Token Name: {:?}, 
-                                    Symbol: {:?}, 
-                                    Decimals: {:?},
-                                From: {:?},
-                                To: {:?},
-                                id: {:?},
-                                Amount: {:?}",
-            simulated_info.operation,
-            simulated_info.token_info.standard,
-            simulated_info.token_info.address,
-            simulated_info.token_info.name,
-            simulated_info.token_info.symbol,
-            simulated_info.token_info.decimals,
-            simulated_info.from,
-            simulated_info.to,
-            id,
-            amount
-        );
-    }
-
     // stop impersonate address
     provider
         .request("anvil_stopImpersonatingAccount", [from])
         .await?;
 
-    Ok(())
+    Ok(simulated_infos)
 }
 
 async fn checks(log: &Log, provider: Provider<Http>) -> Result<Option<SimulatedInfo>> {
@@ -364,7 +370,7 @@ fn return_eip20_test_case<'a>() -> (&'a str, &'a str, &'a str, u64, u64) {
 }
 
 fn return_eip721_test_case<'a>() -> (&'a str, &'a str, &'a str, u64, u64) {
-    // return a uniswap swap tx data
+    // return an erc1155 and erc20 tx
 
     let from = "0x77c5D44F392DD825A073C417EDe8C2f8bce603F6";
     let to = "0x00000000000000ADc04C56Bf30aC9d3c0aAF14dC";
@@ -373,4 +379,24 @@ fn return_eip721_test_case<'a>() -> (&'a str, &'a str, &'a str, u64, u64) {
     let block_number: u64 = 17673303;
 
     (from, to, data, value, block_number)
+}
+
+
+
+
+
+#[cfg(test)]
+mod test{
+    use super::*;
+
+    #[tokio::test]
+    async fn it_works() -> Result<(), String> {
+        let (from, to, data, value, block_number) = return_eip20_test_case();
+        let _sim_result = simulate(from, to, data, value, block_number).await;
+
+        let (from, to, data, value, block_number) = return_eip721_test_case();
+        let _sim_result = simulate(from, to, data, value, block_number).await;
+
+        Ok(())
+    }
 }
