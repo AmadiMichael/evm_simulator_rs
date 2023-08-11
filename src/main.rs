@@ -99,7 +99,7 @@ fn print_result(simulated_infos: Vec<SimulatedInfo>) -> Result<()> {
         let decimals: u32 = simulated_info.token_info.decimals.to_string().parse()?;
         let amount = match decimals > 0 {
             true => format_units(simulated_info.amount, decimals).unwrap(),
-            false => format!("{}", simulated_info.amount)
+            false => format!("{}", simulated_info.amount),
         };
         let id = match simulated_info.id {
             Some(id) => format!("{}", id),
@@ -134,7 +134,6 @@ fn print_result(simulated_infos: Vec<SimulatedInfo>) -> Result<()> {
     Ok(())
 }
 
-
 async fn simulate(
     from: &str,
     to: &str,
@@ -145,7 +144,11 @@ async fn simulate(
     println!("Starting simulation...");
     dotenv().ok();
     let alchemy_api_key = std::env::var("ALCHEMY_API_KEY").expect("ALCHEMY_API_KEY must be set.");
-    let rpc_url: &str = &("https://eth-mainnet.g.alchemy.com/v2/".to_owned() + &alchemy_api_key); // "http://127.0.0.1:8545"; //
+    let mut url = String::from("https://eth-mainnet.g.alchemy.com/v2/"); // "http://127.0.0.1:8545";
+    let rpc_url: &str = {
+        url.push_str(&alchemy_api_key);
+        url.as_str()
+    };
     let anvil = Anvil::new()
         .fork(rpc_url)
         .fork_block_number(block_number)
@@ -381,12 +384,8 @@ fn return_eip721_test_case<'a>() -> (&'a str, &'a str, &'a str, u64, u64) {
     (from, to, data, value, block_number)
 }
 
-
-
-
-
 #[cfg(test)]
-mod test{
+mod test {
     use super::*;
 
     #[tokio::test]
