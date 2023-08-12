@@ -4,44 +4,6 @@ use std::process;
 
 use evm_simulator;
 
-/// In Ethereum, transactions must be signed with a private key before they can be broadcast to the
-/// network. Ethers-rs provides a way to customize this process by allowing
-/// you to define a signer, called to sign transactions before they are sent.
-// #[tokio::main]
-// async fn main() -> Result<()> {
-//     let args = return_eip20_test_case();
-//         let simulation_params = evm_simulator::SimulationParams::new(&args)?;
-
-//         println!("\n {:?}", simulation_params);
-
-//         let sim_result_result = evm_simulator::simulate(simulation_params).await;
-//         let _ = match sim_result_result {
-//             Ok(sim_result) => evm_simulator::print_result(sim_result),
-//             Err(sim_error) => {
-//                 eprintln!("{:?}", sim_error);
-//                 process::exit(1);
-//             }
-//         };
-
-//         let args = return_eip721_test_case();
-//         let simulation_params = evm_simulator::SimulationParams::new(&args)?;
-
-//         println!("\n {:?}", simulation_params);
-
-//         let sim_result_result = evm_simulator::simulate(simulation_params).await;
-//         let _ = match sim_result_result {
-//             Ok(sim_result) => evm_simulator::print_result(sim_result),
-//             Err(sim_error) => {
-//                 eprintln!("{:?}", sim_error);
-//                 process::exit(1);
-//             }
-//         };
-
-//         Ok(())
-
-//     Ok(())
-// }
-
 #[tokio::main]
 async fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
@@ -50,7 +12,19 @@ async fn main() -> Result<()> {
         process::exit(1);
     });
 
-    println!("\n {:?}", simulation_params);
+    println!(
+        "\n\n\x1b[1m Simulating transaction with details:
+    \x1b[92m From: \x1b[0m {:?}
+    \x1b[92m To: \x1b[0m {:?}
+    \x1b[92m Data: \x1b[0m {}
+    \x1b[92m Value: \x1b[0m {}
+    \x1b[92m Block Number: \x1b[0m {}\n",
+        simulation_params.from,
+        simulation_params.to,
+        simulation_params.data,
+        simulation_params.value,
+        simulation_params.block_number.unwrap_or_else(|| 0)
+    );
 
     let sim_result = evm_simulator::simulate(simulation_params).await?;
     let _ = evm_simulator::print_result(sim_result);
@@ -58,6 +32,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+// still working on tests
 #[cfg(test)]
 mod test {
     use super::*;

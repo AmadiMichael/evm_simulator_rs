@@ -97,13 +97,13 @@ impl SimulationParams {
         let from = args[1].parse::<Address>();
         let from = match from {
             Ok(f) => f,
-            _ => return Err("could not parse from into Address type"),
+            _ => return Err("invalid 'from' address provided"),
         };
 
         let to = args[2].parse::<Address>();
         let to = match to {
             Ok(t) => t,
-            _ => return Err("could not parse to into Address type"),
+            _ => return Err("Invalid 'to' address provided"),
         };
 
         let data;
@@ -114,7 +114,7 @@ impl SimulationParams {
         }
         let data = match data {
             Ok(d) => d,
-            _ => return Err("could not parse to into Address type"),
+            _ => return Err("Invalid 'input data' provided"),
         };
 
         let value = parse_ether(args[4].as_str());
@@ -129,7 +129,7 @@ impl SimulationParams {
             let block_number = args[5].parse::<u64>();
             let block_number = match block_number {
                 Ok(num) => Some(num),
-                _ => return Err("Block number parsed in not valid number"),
+                _ => return Err("Block number parsed in not a valid number. To use the current block number, parse in an empty string e.g ''"),
             };
             block_number
         };
@@ -145,7 +145,6 @@ impl SimulationParams {
 }
 
 pub async fn simulate(simulation_params: SimulationParams) -> Result<Vec<SimulatedInfo>> {
-    println!("Starting simulation...");
     dotenv().ok();
     let alchemy_api_key = std::env::var("ALCHEMY_API_KEY").expect("ALCHEMY_API_KEY must be set.");
     let mut url = String::from("https://eth-mainnet.g.alchemy.com/v2/"); // "http://127.0.0.1:8545";
@@ -211,6 +210,7 @@ pub async fn simulate(simulation_params: SimulationParams) -> Result<Vec<Simulat
 }
 
 pub fn print_result(simulated_infos: Vec<SimulatedInfo>) -> Result<()> {
+    println!("\n\n\n\n\x1b[92m ---------------------------------------------------- SIMULATION RESULTS -----------------------------------------------------");
     for (index, simulated_info) in simulated_infos.iter().enumerate() {
         let decimals: u32 = simulated_info.token_info.decimals.to_string().parse()?;
         let amount = match decimals > 0 {
@@ -223,18 +223,18 @@ pub fn print_result(simulated_infos: Vec<SimulatedInfo>) -> Result<()> {
         };
 
         println!(
-            "detected {index}: 
-                                Operation: {:?},
-                                Token Info:
-                                    Standard: {:?},
-                                    Address: {:?},  
-                                    Token Name: {:?}, 
-                                    Symbol: {:?}, 
-                                    Decimals: {:?},
-                                From: {:?},
-                                To: {:?},
-                                id: {:?},
-                                Amount: {:?}",
+            "\n\x1b[94m\x1b[1m Detected 'watched event {index}'\x1b[0m: 
+                        Operation: {:?},
+                        Token Info:
+                            Standard: {:?},
+                            Address: {:?},  
+                            Token Name: {:?}, 
+                            Symbol: {:?}, 
+                            Decimals: {:?},
+                        From: {:?},
+                        To: {:?},
+                        id: {:?},
+                        Amount: {:?}",
             simulated_info.operation,
             simulated_info.token_info.standard,
             simulated_info.token_info.address,
@@ -251,7 +251,10 @@ pub fn print_result(simulated_infos: Vec<SimulatedInfo>) -> Result<()> {
 }
 
 async fn checks(log: &Log, provider: Provider<Http>) -> Result<Option<SimulatedInfo>> {
-    let topic0: [u8; 32] = log.topics[0].as_bytes().try_into()?;
+    let topic0 = log.topics[0]
+        .as_bytes()
+        .try_into()
+        .expect("could not convert topic0 into a uint8 array");
 
     if CHECKED_TOPICS.contains(&topic0) {
         let amount: U256;
