@@ -149,6 +149,8 @@ cargo run -- --from 0x3B059f15059d976cA189165ee36d75Cb18249daf --to 0x7a250d5630
 It expects a minimum of 2 flags with inputs: `--from <address>` and `--to <address>`
 It can also take 3 extra inputs for customizability: `--data <inputdata>` (defaults to `0x` if not specified), `--value <value>` (defaults to `0 wei` if not specified), `--block <blocknumber>` (defaults to the latest block if not specified) and `--rpc <rpcurl>` (defaults to the key `RPC_URL` in your `.env` file and reverts if it doesn't find it).
 
+    Note: For older blocks, you would need an archival node's rpc url
+
 ### For more info, run:
 
 ```zsh
