@@ -13,6 +13,8 @@ use std::convert::TryFrom;
 use std::process;
 use std::sync::Arc;
 
+pub mod cli;
+
 // Constants
 const APPROVAL: [u8; 32] = [
     140, 91, 225, 229, 235, 236, 125, 91, 209, 79, 113, 66, 125, 30, 132, 243, 221, 3, 20, 192,
@@ -35,6 +37,7 @@ const TRANSFER_BATCH: [u8; 32] = [
     208, 126, 89, 93, 152, 59, 140, 5, 38, 200, 247, 251,
 ]; // 0x4a39dc06d4c0dbc64b70af90fd698a233a518aa5d07e595d983b8c0526c8f7fb
 
+// array of checked topics
 const CHECKED_TOPICS: [[u8; 32]; 5] = [
     APPROVAL,
     TRANSFER,
@@ -70,7 +73,7 @@ pub struct TokenInfo {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct SimulatedInfo {
+pub struct SimulationResults {
     pub operation: Operation,
     pub token_info: TokenInfo,
     pub from: Address,
@@ -154,7 +157,7 @@ impl SimulationParams {
     }
 }
 
-pub async fn simulate(simulation_params: SimulationParams) -> Result<Vec<SimulatedInfo>> {
+pub async fn simulate(simulation_params: SimulationParams) -> Result<Vec<SimulationResults>> {
     let rpc_url = match simulation_params.rpc_url {
         Some(u) => u,
         None => {
@@ -200,7 +203,7 @@ pub async fn simulate(simulation_params: SimulationParams) -> Result<Vec<Simulat
     let logs = receipt.logs;
     // println!("logs: {:?}", logs);
 
-    let mut simulated_infos: Vec<SimulatedInfo> = Vec::new();
+    let mut simulated_infos: Vec<SimulationResults> = Vec::new();
 
     for log in logs.iter() {
         match checks(log, provider.clone()).await {
@@ -221,7 +224,7 @@ pub async fn simulate(simulation_params: SimulationParams) -> Result<Vec<Simulat
     Ok(simulated_infos)
 }
 
-pub fn print_result(simulated_infos: Vec<SimulatedInfo>) -> Result<()> {
+pub fn print_result(simulated_infos: Vec<SimulationResults>) -> Result<()> {
     println!("\n\n\n\n\x1b[92m ---------------------------------------------------- SIMULATION RESULTS -----------------------------------------------------");
     for (index, simulated_info) in simulated_infos.iter().enumerate() {
         let decimals: u32 = simulated_info.token_info.decimals.to_string().parse()?;
@@ -235,7 +238,7 @@ pub fn print_result(simulated_infos: Vec<SimulatedInfo>) -> Result<()> {
         };
 
         println!(
-            "\n\x1b[94m\x1b[1m Detected 'watched event {index}'\x1b[0m: 
+            "\n\x1b[94m\x1b[1m Detected 'watched event number {index}'\x1b[0m: 
                         Operation: {:?},
                         Token Info:
                             Standard: {:?},
@@ -262,7 +265,7 @@ pub fn print_result(simulated_infos: Vec<SimulatedInfo>) -> Result<()> {
     Ok(())
 }
 
-async fn checks(log: &Log, provider: Provider<Http>) -> Result<Option<SimulatedInfo>> {
+async fn checks(log: &Log, provider: Provider<Http>) -> Result<Option<SimulationResults>> {
     let topic0 = log.topics[0]
         .as_bytes()
         .try_into()
@@ -322,9 +325,9 @@ fn match_sim_res(
     amount: U256,
     id: Option<U256>,
     log: &Log,
-) -> Result<Option<SimulatedInfo>> {
+) -> Result<Option<SimulationResults>> {
     match topic0 {
-        APPROVAL => Ok(Some(SimulatedInfo {
+        APPROVAL => Ok(Some(SimulationResults {
             operation: Operation::Approval,
             token_info: TokenInfo {
                 standard: Standard::NONE,
@@ -338,7 +341,7 @@ fn match_sim_res(
             amount,
             id,
         })),
-        TRANSFER => Ok(Some(SimulatedInfo {
+        TRANSFER => Ok(Some(SimulationResults {
             operation: Operation::Transfer,
             token_info: TokenInfo {
                 standard: Standard::NONE,
@@ -352,7 +355,7 @@ fn match_sim_res(
             amount,
             id,
         })),
-        APPROVAL_FOR_ALL => Ok(Some(SimulatedInfo {
+        APPROVAL_FOR_ALL => Ok(Some(SimulationResults {
             operation: Operation::ApprovalForAll,
             token_info: TokenInfo {
                 standard: Standard::NONE,
@@ -366,7 +369,7 @@ fn match_sim_res(
             amount,
             id,
         })),
-        TRANSFER_SINGLE => Ok(Some(SimulatedInfo {
+        TRANSFER_SINGLE => Ok(Some(SimulationResults {
             operation: Operation::TransferSingle,
             token_info: TokenInfo {
                 standard: Standard::Eip1155,
@@ -380,7 +383,7 @@ fn match_sim_res(
             amount,
             id,
         })),
-        _ => Ok(Some(SimulatedInfo {
+        _ => Ok(Some(SimulationResults {
             operation: Operation::TransferBatch,
             token_info: TokenInfo {
                 standard: Standard::Eip1155,

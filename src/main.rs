@@ -1,14 +1,10 @@
-pub mod cli;
-
 use eyre::Result;
 use std::process;
 
-use evm_simulator::{print_result, simulate, SimulationParams};
+use evm_simulator::{print_result, simulate, cli, SimulationParams};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // let args: Vec<String> = env::args().collect();
-
     let args: Vec<String> = cli::cli();
     let simulation_params = SimulationParams::new(&args).unwrap_or_else(|e| {
         eprintln!("{}", e);
@@ -40,7 +36,7 @@ async fn main() -> Result<()> {
 mod test {
     use ethers::types::{Address, U256};
     use evm_simulator::{
-        simulate, Operation, SimulatedInfo, SimulationParams, Standard, TokenInfo,
+        simulate, Operation, SimulationResults, SimulationParams, Standard, TokenInfo,
     };
     use eyre::Result;
 
@@ -82,7 +78,7 @@ mod test {
             Err(_) => return Err("Simulation failed".to_owned()),
         };
         let expected_result = vec![
-            SimulatedInfo {
+            SimulationResults {
                 operation: Operation::Transfer,
                 token_info: TokenInfo {
                     standard: Standard::NONE,
@@ -102,7 +98,7 @@ mod test {
                 id: None,
                 amount: U256::from_dec_str("16119000000000000").unwrap(),
             },
-            SimulatedInfo {
+            SimulationResults {
                 operation: Operation::Approval,
                 token_info: TokenInfo {
                     standard: Standard::NONE,
@@ -122,7 +118,7 @@ mod test {
                 id: None,
                 amount: U256::from(0),
             },
-            SimulatedInfo {
+            SimulationResults {
                 operation: Operation::Transfer,
                 token_info: TokenInfo {
                     standard: Standard::NONE,
@@ -160,7 +156,7 @@ mod test {
             Err(_) => return Err("Simulation failed".to_owned()),
         };
         let expected_result = vec![
-            SimulatedInfo {
+            SimulationResults {
                 operation: Operation::Transfer,
                 token_info: TokenInfo {
                     standard: Standard::NONE,
@@ -180,7 +176,7 @@ mod test {
                 id: None,
                 amount: U256::from_dec_str("60000000000000000").unwrap(),
             },
-            SimulatedInfo {
+            SimulationResults {
                 operation: Operation::TransferSingle,
                 token_info: TokenInfo {
                     standard: Standard::Eip1155,
@@ -200,7 +196,7 @@ mod test {
                 id: Some(U256::from_dec_str("10284").unwrap()),
                 amount: U256::from_dec_str("2").unwrap(),
             },
-            SimulatedInfo {
+            SimulationResults {
                 operation: Operation::Transfer,
                 token_info: TokenInfo {
                     standard: Standard::NONE,
