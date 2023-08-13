@@ -80,27 +80,30 @@ pub struct SimulatedInfo {
 }
 
 #[derive(Debug)]
+pub enum BlockNumberType {
+    Past(u64),
+    Latest,
+}
+
+#[derive(Debug)]
 pub struct SimulationParams {
     pub from: Address,
     pub to: Address,
     pub data: Bytes,
     pub value: U256,
-    pub block_number: Option<u64>,
+    pub block_number: BlockNumberType,
+    rpc_url: Option<String>,
 }
 
 impl SimulationParams {
     pub fn new(args: &Vec<String>) -> Result<Self, &str> {
-        if args.len() < 6 {
-            return Err("Not enough arguments");
-        }
-
-        let from = args[1].parse::<Address>();
+        let from = args[0].parse::<Address>();
         let from = match from {
             Ok(f) => f,
             _ => return Err("invalid 'from' address provided"),
         };
 
-        let to = args[2].parse::<Address>();
+        let to = args[1].parse::<Address>();
         let to = match to {
             Ok(t) => t,
             _ => return Err("Invalid 'to' address provided"),
@@ -110,28 +113,34 @@ impl SimulationParams {
         if args[3] == "" {
             data = "0x".parse::<Bytes>();
         } else {
-            data = args[3].parse::<Bytes>();
+            data = args[2].parse::<Bytes>();
         }
         let data = match data {
             Ok(d) => d,
             _ => return Err("Invalid 'input data' provided"),
         };
 
-        let value = parse_ether(args[4].as_str());
+        let value = parse_ether(args[3].as_str());
         let value = match value {
             Ok(val) => val,
             _ => return Err("Invalid ether value provided"),
         };
 
-        let block_number = if args[5] == "" {
-            None
+        let block_number = if args[4].len() == 0 {
+            BlockNumberType::Latest
         } else {
-            let block_number = args[5].parse::<u64>();
+            let block_number = args[4].parse::<u64>();
             let block_number = match block_number {
-                Ok(num) => Some(num),
+                Ok(num) => BlockNumberType::Past(num),
                 _ => return Err("Block number parsed in not a valid number. To use the current block number, parse in an empty string e.g ''"),
             };
             block_number
+        };
+
+        let rpc_url = if args[5].len() == 0 {
+            None
+        } else {
+            Some(args[5].to_owned())
         };
 
         Ok(SimulationParams {
@@ -140,22 +149,25 @@ impl SimulationParams {
             data,
             value,
             block_number,
+            rpc_url,
         })
     }
 }
 
 pub async fn simulate(simulation_params: SimulationParams) -> Result<Vec<SimulatedInfo>> {
-    dotenv().ok();
-    let alchemy_api_key = std::env::var("ALCHEMY_API_KEY").expect("ALCHEMY_API_KEY must be set.");
-    let mut url = String::from("https://eth-mainnet.g.alchemy.com/v2/"); // "http://127.0.0.1:8545";
-    let rpc_url: &str = {
-        url.push_str(&alchemy_api_key);
-        url.as_str()
+    let rpc_url = match simulation_params.rpc_url {
+        Some(u) => u,
+        None => {
+            dotenv().ok();
+            let url =
+                std::env::var("RPC_URL").expect("RPC_URL must be set if rpc flag is not given"); // "http://127.0.0.1:8545";
+            url
+        }
     };
 
     let anvil = match simulation_params.block_number {
-        Some(num) => Anvil::new().fork(rpc_url).fork_block_number(num).spawn(),
-        None => Anvil::new().fork(rpc_url).spawn(),
+        BlockNumberType::Past(num) => Anvil::new().fork(rpc_url).fork_block_number(num).spawn(),
+        BlockNumberType::Latest => Anvil::new().fork(rpc_url).spawn(),
     };
     let provider =
         Provider::<Http>::try_from(anvil.endpoint()).expect("could not instantiate HTTP Provider");
