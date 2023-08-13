@@ -2,12 +2,12 @@ use eyre::Result;
 use std::env;
 use std::process;
 
-use evm_simulator;
+use evm_simulator::{simulate, SimulationParams, print_result};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
-    let simulation_params = evm_simulator::SimulationParams::new(&args).unwrap_or_else(|e| {
+    let simulation_params = SimulationParams::new(&args).unwrap_or_else(|e| {
         eprintln!("{}", e);
         process::exit(1);
     });
@@ -26,8 +26,8 @@ async fn main() -> Result<()> {
         simulation_params.block_number.unwrap_or_else(|| 0)
     );
 
-    let sim_result = evm_simulator::simulate(simulation_params).await?;
-    let _ = evm_simulator::print_result(sim_result);
+    let sim_result = simulate(simulation_params).await?;
+    let _ = print_result(sim_result);
 
     Ok(())
 }
@@ -35,10 +35,12 @@ async fn main() -> Result<()> {
 // still working on tests
 #[cfg(test)]
 mod test {
-    use super::*;
+    use ethers::types::{Address, U256};
+    use evm_simulator::{Operation, SimulatedInfo, Standard, TokenInfo, simulate, SimulationParams};
+    use eyre::Result;
 
     // test runs
-    fn return_eip20_test_case() -> Vec<String> {
+    fn return_erc20_test_case() -> Vec<String> {
         // return a uniswap swap tx data
 
         let path = "path".to_owned();
@@ -51,7 +53,7 @@ mod test {
         vec![path, from, to, data, value, block_number]
     }
 
-    fn return_eip721_test_case() -> Vec<String> {
+    fn return_nft_test_case() -> Vec<String> {
         // return an erc1155 and erc20 tx
 
         let path = "path".to_owned();
@@ -65,34 +67,157 @@ mod test {
     }
 
     #[tokio::test]
-    async fn it_works() -> Result<(), String> {
-        let args = return_eip20_test_case();
-        let simulation_params = evm_simulator::SimulationParams::new(&args)?;
+    async fn test_swap_tx_sim_should_detect_expected_logs() -> Result<(), String> {
+        let args = return_erc20_test_case();
+        let simulation_params = SimulationParams::new(&args)?;
 
-        println!("\n {:?}", simulation_params);
-
-        let sim_result_result = evm_simulator::simulate(simulation_params).await;
-        let _ = match sim_result_result {
-            Ok(sim_result) => evm_simulator::print_result(sim_result),
-            Err(sim_error) => {
-                eprintln!("{:?}", sim_error);
-                process::exit(1);
-            }
+        let sim_result = simulate(simulation_params).await;
+        let sim_result = match sim_result {
+            Ok(r) => r,
+            Err(_) => return Err("Simulation failed".to_owned()),
         };
+        let expected_result = vec![
+            SimulatedInfo {
+                operation: Operation::Transfer,
+                token_info: TokenInfo {
+                    standard: Standard::NONE,
+                    address: "0xe30bbec87855c8710729e6b8384ef9783c76379c"
+                        .parse::<Address>()
+                        .unwrap(),
+                    name: "Wrapped Luna".to_owned(),
+                    symbol: "WLUNA".to_owned(),
+                    decimals: U256::from(9),
+                },
+                from: "0x448e0f9f42746f6165dbe6e7b77149bb0f631e6e"
+                    .parse::<Address>()
+                    .unwrap(),
+                to: "0x7a333329ba40a0999ba1c8b4d56acc1107c7a501"
+                    .parse::<Address>()
+                    .unwrap(),
+                id: None,
+                amount: U256::from_dec_str("16119000000000000").unwrap(),
+            },
+            SimulatedInfo {
+                operation: Operation::Approval,
+                token_info: TokenInfo {
+                    standard: Standard::NONE,
+                    address: "0xe30bbec87855c8710729e6b8384ef9783c76379c"
+                        .parse::<Address>()
+                        .unwrap(),
+                    name: "Wrapped Luna".to_owned(),
+                    symbol: "WLUNA".to_owned(),
+                    decimals: U256::from(9),
+                },
+                from: "0x448e0f9f42746f6165dbe6e7b77149bb0f631e6e"
+                    .parse::<Address>()
+                    .unwrap(),
+                to: "0x2ec705d306b51e486b1bc0d6ebee708e0661add1"
+                    .parse::<Address>()
+                    .unwrap(),
+                id: None,
+                amount: U256::from(0),
+            },
+            SimulatedInfo {
+                operation: Operation::Transfer,
+                token_info: TokenInfo {
+                    standard: Standard::NONE,
+                    address: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+                        .parse::<Address>()
+                        .unwrap(),
+                    name: "Wrapped Ether".to_owned(),
+                    symbol: "WETH".to_owned(),
+                    decimals: U256::from(18),
+                },
+                from: "0x7a333329ba40a0999ba1c8b4d56acc1107c7a501"
+                    .parse::<Address>()
+                    .unwrap(),
+                to: "0x2ec705d306b51e486b1bc0d6ebee708e0661add1"
+                    .parse::<Address>()
+                    .unwrap(),
+                id: None,
+                amount: U256::from_dec_str("20210640756165174").unwrap(),
+            },
+        ];
 
-        let args = return_eip721_test_case();
-        let simulation_params = evm_simulator::SimulationParams::new(&args)?;
+        assert_eq!(sim_result, expected_result);
 
-        println!("\n {:?}", simulation_params);
+        Ok(())
+    }
 
-        let sim_result_result = evm_simulator::simulate(simulation_params).await;
-        let _ = match sim_result_result {
-            Ok(sim_result) => evm_simulator::print_result(sim_result),
-            Err(sim_error) => {
-                eprintln!("{:?}", sim_error);
-                process::exit(1);
-            }
+    #[tokio::test]
+    async fn test_nft_tx_sim_should_detect_expected_logs() -> Result<(), String> {
+        let args = return_nft_test_case();
+        let simulation_params = SimulationParams::new(&args)?;
+
+        let sim_result = simulate(simulation_params).await;
+        let sim_result = match sim_result {
+            Ok(r) => r,
+            Err(_) => return Err("Simulation failed".to_owned()),
         };
+        let expected_result = vec![
+            SimulatedInfo {
+                operation: Operation::Transfer,
+                token_info: TokenInfo {
+                    standard: Standard::NONE,
+                    address: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+                        .parse::<Address>()
+                        .unwrap(),
+                    name: "Wrapped Ether".to_owned(),
+                    symbol: "WETH".to_owned(),
+                    decimals: U256::from_dec_str("18").unwrap(),
+                },
+                from: "0x0b818dc9d41732617dfc5bc8dff03dac632780e1"
+                    .parse::<Address>()
+                    .unwrap(),
+                to: "0x77c5d44f392dd825a073c417ede8c2f8bce603f6"
+                    .parse::<Address>()
+                    .unwrap(),
+                id: None,
+                amount: U256::from_dec_str("60000000000000000").unwrap(),
+            },
+            SimulatedInfo {
+                operation: Operation::TransferSingle,
+                token_info: TokenInfo {
+                    standard: Standard::Eip1155,
+                    address: "0x76be3b62873462d2142405439777e971754e8e77"
+                        .parse::<Address>()
+                        .unwrap(),
+                    name: "".to_owned(),
+                    symbol: "".to_owned(),
+                    decimals: U256::from_dec_str("0").unwrap(),
+                },
+                from: "0x1e0049783f008a0085193e00003d00cd54003c71"
+                    .parse::<Address>()
+                    .unwrap(),
+                to: "0x77c5d44f392dd825a073c417ede8c2f8bce603f6"
+                    .parse::<Address>()
+                    .unwrap(),
+                id: Some(U256::from_dec_str("10284").unwrap()),
+                amount: U256::from_dec_str("2").unwrap(),
+            },
+            SimulatedInfo {
+                operation: Operation::Transfer,
+                token_info: TokenInfo {
+                    standard: Standard::NONE,
+                    address: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+                        .parse::<Address>()
+                        .unwrap(),
+                    name: "Wrapped Ether".to_owned(),
+                    symbol: "WETH".to_owned(),
+                    decimals: U256::from_dec_str("18").unwrap(),
+                },
+                from: "0x77c5d44f392dd825a073c417ede8c2f8bce603f6"
+                    .parse::<Address>()
+                    .unwrap(),
+                to: "0x0000a26b00c1f0df003000390027140000faa719"
+                    .parse::<Address>()
+                    .unwrap(),
+                id: None,
+                amount: U256::from_dec_str("1500000000000000").unwrap(),
+            },
+        ];
+
+        assert_eq!(sim_result, expected_result);
 
         Ok(())
     }

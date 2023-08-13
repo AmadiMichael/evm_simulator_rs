@@ -44,7 +44,7 @@ const CHECKED_TOPICS: [[u8; 32]; 5] = [
 ];
 
 // Types
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Operation {
     Approval,
     Transfer,
@@ -53,14 +53,14 @@ pub enum Operation {
     TransferBatch,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Standard {
     // This is mostly to specify eip1155 contracts but can be expanded to specify eip20 and 721 contracts later
     NONE,
     Eip1155,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct TokenInfo {
     pub standard: Standard,
     pub address: Address,
@@ -69,7 +69,7 @@ pub struct TokenInfo {
     pub decimals: U256,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct SimulatedInfo {
     pub operation: Operation,
     pub token_info: TokenInfo,
