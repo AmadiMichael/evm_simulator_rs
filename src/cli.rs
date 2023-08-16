@@ -56,13 +56,6 @@ pub fn cli() -> Vec<String> {
     let block = matches.value_of("block").unwrap_or_default();
     let rpc = matches.value_of("rpc").unwrap_or_default();
 
-    // println!("From: {}", from);
-    // println!("To: {}", to);
-    // println!("Data: {}", data);
-    // println!("Value: {}", value);
-    // println!("Block: {}", block);
-    // println!("Rpc: {}", rpc);
-
     vec![
         from.to_owned(),
         to.to_owned(),

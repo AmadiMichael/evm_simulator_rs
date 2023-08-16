@@ -1,7 +1,7 @@
 use eyre::Result;
 use std::process;
 
-use evm_simulator::{print_result, simulate, cli, SimulationParams};
+use evm_simulator::{cli, print_result, simulate, SimulationParams};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -36,7 +36,7 @@ async fn main() -> Result<()> {
 mod test {
     use ethers::types::{Address, U256};
     use evm_simulator::{
-        simulate, Operation, SimulationResults, SimulationParams, Standard, TokenInfo,
+        simulate, Operation, SimulationParams, SimulationResults, Standard, TokenInfo,
     };
     use eyre::Result;
 

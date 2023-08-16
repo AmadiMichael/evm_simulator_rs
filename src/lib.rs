@@ -225,7 +225,12 @@ pub async fn simulate(simulation_params: SimulationParams) -> Result<Vec<Simulat
 }
 
 pub fn print_result(simulated_infos: Vec<SimulationResults>) -> Result<()> {
-    println!("\n\n\n\n\x1b[92m ---------------------------------------------------- SIMULATION RESULTS -----------------------------------------------------");
+    if simulated_infos.len() == 0 { 
+        println!("No watched events detected!");
+        return Ok(()); 
+    }
+
+    println!("\n\n\n\n\x1b[92m _____________________________________________________________________ SIMULATION RESULTS _____________________________________________________________________\n");
     for (index, simulated_info) in simulated_infos.iter().enumerate() {
         let decimals: u32 = simulated_info.token_info.decimals.to_string().parse()?;
         let amount = match decimals > 0 {
@@ -238,18 +243,20 @@ pub fn print_result(simulated_infos: Vec<SimulationResults>) -> Result<()> {
         };
 
         println!(
-            "\n\x1b[94m\x1b[1m Detected 'watched event number {index}'\x1b[0m: 
-                        Operation: {:?},
-                        Token Info:
-                            Standard: {:?},
-                            Address: {:?},  
-                            Token Name: {:?}, 
-                            Symbol: {:?}, 
-                            Decimals: {:?},
-                        From: {:?},
-                        To: {:?},
-                        id: {:?},
-                        Amount: {:?}",
+            "  \x1b[94m{}. \x1b[0m{:?}
+            Token Info:
+                Standard: {:?},
+                Address: {:?},  
+                Token Name: {:?}, 
+                Symbol: {:?}, 
+                Decimals: {:?},
+                
+            From: {:?},
+            To: {:?},
+            id: {:?},
+            Amount: {:?}
+\n\x1b[92m________________________________________________________________________________________________________________________________________________________________\n",
+            index + 1,
             simulated_info.operation,
             simulated_info.token_info.standard,
             simulated_info.token_info.address,
