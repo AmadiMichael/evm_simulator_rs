@@ -135,7 +135,7 @@ impl SimulationParams {
             let block_number = args[4].parse::<u64>();
             let block_number = match block_number {
                 Ok(num) => BlockNumberType::Past(num),
-                _ => return Err("Block number parsed in not a valid number. To use the current block number, parse in an empty string e.g ''"),
+                _ => return Err("Block number parsed in not a valid number. To use the current block number, parse in an empty string e.g '' or don't specify a block number at all"),
             };
             block_number
         };
@@ -225,9 +225,9 @@ pub async fn simulate(simulation_params: SimulationParams) -> Result<Vec<Simulat
 }
 
 pub fn print_result(simulated_infos: Vec<SimulationResults>) -> Result<()> {
-    if simulated_infos.len() == 0 { 
+    if simulated_infos.len() == 0 {
         println!("No watched events detected!");
-        return Ok(()); 
+        return Ok(());
     }
 
     println!("\n\n\n\n\x1b[92m _____________________________________________________________________ SIMULATION RESULTS _____________________________________________________________________\n");
@@ -251,10 +251,11 @@ pub fn print_result(simulated_infos: Vec<SimulationResults>) -> Result<()> {
                 Symbol: {:?}, 
                 Decimals: {:?},
                 
-            From: {:?},
-            To: {:?},
-            id: {:?},
-            Amount: {:?}
+            Operation Info:
+                From: {:?},
+                To: {:?},
+                id: {:?},
+                Amount: {:?}
 \n\x1b[92m________________________________________________________________________________________________________________________________________________________________\n",
             index + 1,
             simulated_info.operation,
