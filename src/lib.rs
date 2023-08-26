@@ -158,16 +158,18 @@ impl SimulationParams {
 }
 
 pub async fn simulate(simulation_params: SimulationParams) -> Result<Vec<SimulationResults>> {
+    // either use parsed in rpc-url if it exists or use the one in the nev file if that exists, else revert
     let rpc_url = match simulation_params.rpc_url {
         Some(u) => u,
         None => {
             dotenv().ok();
             let url =
-                std::env::var("RPC_URL").expect("RPC_URL must be set if rpc flag is not given"); // "http://127.0.0.1:8545";
+                std::env::var("RPC_URL").expect("RPC_URL must be set if rpc flag is not given");
             url
         }
     };
 
+    // create instance of forked chain using anvil
     let anvil = match simulation_params.block_number {
         BlockNumberType::Past(num) => Anvil::new().fork(rpc_url).fork_block_number(num).spawn(),
         BlockNumberType::Latest => Anvil::new().fork(rpc_url).spawn(),
@@ -413,7 +415,7 @@ async fn get_token_name_and_symbol(
     provider: Provider<Http>,
 ) -> Result<(String, String, U256)> {
     abigen!(
-        IERC20,
+        TokenInstance,
         r#"[
             function name() external view returns (string)
             function symbol() external view returns (string)
@@ -422,11 +424,11 @@ async fn get_token_name_and_symbol(
     );
 
     let client = Arc::new(provider);
-    let contract = IERC20::new(address, client.clone());
+    let token_instance = TokenInstance::new(address, client.clone());
 
-    let name = contract.method::<_, String>("name", ())?;
-    let symbol = contract.method::<_, String>("symbol", ())?;
-    let decimals = contract.method::<_, U256>("decimals", ())?;
+    let name = token_instance.method::<_, String>("name", ())?;
+    let symbol = token_instance.method::<_, String>("symbol", ())?;
+    let decimals = token_instance.method::<_, U256>("decimals", ())?;
 
     let mut multicall = Multicall::new(client, None).await?;
     multicall
