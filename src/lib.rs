@@ -207,7 +207,7 @@ pub async fn simulate(simulation_params: SimulationParams) -> Result<Vec<Simulat
 
     let mut simulated_infos: Vec<SimulationResults> = Vec::new();
 
-    for log in logs.iter() {
+    for log in logs.into_iter() {
         match checks(log, provider.clone()).await {
             Ok(Some(x)) => simulated_infos.push(x),
             Ok(None) => {}
@@ -275,7 +275,7 @@ pub fn print_result(simulated_infos: Vec<SimulationResults>) -> Result<()> {
     Ok(())
 }
 
-async fn checks(log: &Log, provider: Provider<Http>) -> Result<Option<SimulationResults>> {
+async fn checks(log: Log, provider: Provider<Http>) -> Result<Option<SimulationResults>> {
     let topic0 = log.topics[0]
         .as_bytes()
         .try_into()
@@ -334,7 +334,7 @@ fn match_sim_res(
     decimals: U256,
     amount: U256,
     id: Option<U256>,
-    log: &Log,
+    log: Log,
 ) -> Result<Option<SimulationResults>> {
     match topic0 {
         APPROVAL => Ok(Some(SimulationResults {
