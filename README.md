@@ -2,7 +2,7 @@ A personal project i'm using to improve in rust.
 
 # EVM SIMULATOR WRITTEN IN RUST
 
-Evm simulator with suppport for ERC20, ERC721 and ERC1155
+Evm simulator with suppport for ERC20, ERC721 and ERC1155. Supports batch simulations now!
 
 ## It detects the following in each simulated transaction
 
@@ -16,7 +16,12 @@ Evm simulator with suppport for ERC20, ERC721 and ERC1155
 ### To test, run this in your terminal
 
 This assumes a valid rpc url link is in the `.env` file.
-You can also specify the `--rpc` flag and a rpc url after that as an alternative to using dotenv and it works the same.
+
+You can also specify the `--rpc ${rpc-url}` as an alternative to using dotenv.
+
+There's also support for simulating groups of transactions one after the other from a persistent fork chain running on a port locally which you can enable by adding `--persist true` flag and also setting the `--rpc` flag to `http://localhost:port`.
+
+Example of a simple single simulation:
 
 ```zsh
 cargo run -- --from 0x3B059f15059d976cA189165ee36d75Cb18249daf --to 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D --data 0x791ac94700000000000000000000000000000000000000000000021e19e0c9bab24000000000000000000000000000000000000000000000000000000191112d9c55be9100000000000000000000000000000000000000000000000000000000000000a00000000000000000000000003b059f15059d976ca189165ee36d75cb18249daf0000000000000000000000000000000000000000000000000000000064d8924a0000000000000000000000000000000000000000000000000000000000000002000000000000000000000000930dac667ca8ac9166c93ae2eec3fb118a83c05f000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2 --value 0 --block 17904698
@@ -166,7 +171,7 @@ ________________________________________________________________________________
 ### To use:
 
 It expects a minimum of 2 flags with inputs: `--from <address>` and `--to <address>`
-It can also take 3 extra inputs for customizability: `--data <inputdata>` (defaults to `0x` if not specified), `--value <value>` (defaults to `0 wei` if not specified), `--block <blocknumber>` (defaults to the latest block if not specified) and `--rpc <rpcurl>` (defaults to the key `RPC_URL` in your `.env` file and reverts if it doesn't find it).
+It can also take 3 extra inputs for customizability: `--data <inputdata>` (defaults to `0x` if not specified), `--value <value>` (defaults to `0 wei` if not specified), `--block <blocknumber>` (defaults to the latest block if not specified), `--rpc <rpcurl>` (defaults to the key `RPC_URL` in your `.env` file and reverts if it doesn't find it) and `--persist <bool>` (defaults to false if not specified).
 
     Note: For older blocks, you would need an archival node's rpc url
 

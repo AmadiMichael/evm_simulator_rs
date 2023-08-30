@@ -47,6 +47,13 @@ pub fn cli() -> Vec<String> {
                 .help("RPC URL")
                 .required(false),
         )
+        .arg(
+            Arg::with_name("persist")
+                .long("persist")
+                .value_name("PERSIST")
+                .help("Persist the state after simulations")
+                .required(false),
+        )
         .get_matches();
 
     let from = matches.value_of("from").unwrap();
@@ -55,6 +62,7 @@ pub fn cli() -> Vec<String> {
     let value = matches.value_of("value").unwrap_or_else(|| "0");
     let block = matches.value_of("block").unwrap_or_default();
     let rpc = matches.value_of("rpc").unwrap_or_default();
+    let persist = matches.value_of("persist").unwrap_or_default();
 
     vec![
         from.to_owned(),
@@ -63,5 +71,6 @@ pub fn cli() -> Vec<String> {
         value.to_owned(),
         block.to_owned(),
         rpc.to_owned(),
+        persist.to_owned(),
     ]
 }

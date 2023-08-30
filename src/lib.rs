@@ -96,6 +96,7 @@ pub struct SimulationParams {
     pub value: U256,
     pub block_number: BlockNumberType,
     rpc_url: Option<String>,
+    pub persist: bool,
 }
 
 impl SimulationParams {
@@ -146,6 +147,14 @@ impl SimulationParams {
             Some(args[5].to_owned())
         };
 
+        let persist = match args[6].len() {
+            0 => false,
+            _ => args[6].parse::<bool>().unwrap_or_else(|_| {
+                eprintln!("invalid boolean parameter for field 'persist'.");
+                process::exit(1)
+            }),
+        };
+
         Ok(SimulationParams {
             from,
             to,
@@ -153,6 +162,7 @@ impl SimulationParams {
             value,
             block_number,
             rpc_url,
+            persist,
         })
     }
 }
@@ -169,13 +179,25 @@ pub async fn simulate(simulation_params: SimulationParams) -> Result<Vec<Simulat
         }
     };
 
-    // create instance of forked chain using anvil
-    let anvil = match simulation_params.block_number {
-        BlockNumberType::Past(num) => Anvil::new().fork(rpc_url).fork_block_number(num).spawn(),
-        BlockNumberType::Latest => Anvil::new().fork(rpc_url).spawn(),
-    };
-    let provider =
-        Provider::<Http>::try_from(anvil.endpoint()).expect("could not instantiate HTTP Provider");
+    let provider: Provider<Http>;
+    let anvil;
+    if simulation_params.persist {
+        provider =
+            Provider::<Http>::try_from(rpc_url).unwrap_or_else(|_| {
+                eprintln!("could not instantiate HTTP Provider");
+                process::exit(1);
+            })
+    } else {
+        // create instance of forked chain using anvil
+        anvil = match simulation_params.block_number {
+            BlockNumberType::Past(num) => Anvil::new().fork(rpc_url).fork_block_number(num).spawn(),
+            BlockNumberType::Latest => Anvil::new().fork(rpc_url).spawn(),
+        };
+        provider = Provider::<Http>::try_from(anvil.endpoint()).unwrap_or_else(|_| {
+            eprintln!("could not instantiate HTTP Provider");
+            process::exit(1);
+        })
+    }
 
     // impersonate address
     provider
@@ -190,7 +212,10 @@ pub async fn simulate(simulation_params: SimulationParams) -> Result<Vec<Simulat
         .data(simulation_params.data);
 
     // send tx
-    let pending_tx = provider.send_transaction(tx, None).await?;
+    let pending_tx = provider.send_transaction(tx, None).await.unwrap_or_else(|e| {
+        eprintln!("transaction reverted with err: {}", e);
+        process::exit(1);
+    });
 
     // await and get receipt and tx
     let receipt = pending_tx
