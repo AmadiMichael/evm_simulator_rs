@@ -1,12 +1,12 @@
 use eyre::Result;
 use std::process;
 
-use evm_simulator::{cli, print_result, simulate, SimulationParams};
+use evm_simulator::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let args: Vec<String> = cli::cli();
-    let simulation_params = SimulationParams::new(&args).unwrap_or_else(|e| {
+    let simulation_params = types::SimulationParams::new(&args).unwrap_or_else(|e| {
         eprintln!("{}", e);
         process::exit(1);
     });
@@ -26,18 +26,21 @@ async fn main() -> Result<()> {
     );
 
     let sim_result = simulate(simulation_params).await?;
-    let _ = print_result(sim_result);
+    let _ = print_result::print_result(sim_result);
 
     Ok(())
 }
+
+
 
 // still working on tests
 #[cfg(test)]
 mod test {
     use ethers::types::{Address, U256};
     use evm_simulator::{
-        simulate, Operation, SimulationParams, SimulationResults, Standard, TokenInfo,
+        simulator::simulate, simulator::types
     };
+    use types::{Operation, SimulationParams, SimulationResults, Standard, TokenInfo};
     use eyre::Result;
 
     // test runs
