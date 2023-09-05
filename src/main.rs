@@ -31,17 +31,13 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-
-
 // still working on tests
 #[cfg(test)]
 mod test {
     use ethers::types::{Address, U256};
-    use evm_simulator::{
-        simulator::simulate, simulator::types
-    };
-    use types::{Operation, SimulationParams, SimulationResults, Standard, TokenInfo};
+    use evm_simulator::{simulator::simulate, simulator::types};
     use eyre::Result;
+    use types::{Operation, SimulationParams, SimulationResults, Standard, TokenInfo};
 
     // test runs
     fn return_erc20_test_case() -> Vec<String> {

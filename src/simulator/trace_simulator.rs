@@ -1,30 +1,36 @@
-
-use dotenv::dotenv;
 use ethers::{
     abi::{decode_whole, ParamType, Token},
     contract::Multicall,
-    core::{types::TransactionRequest},
+    core::types::TransactionRequest,
     prelude::abigen,
     providers::{Http, Middleware, Provider},
-    types::{Address, Bytes, GethDebugTracingCallOptions, Log, H256, U256, GethDebugTracingOptions, DefaultFrame, StructLog},
-    utils::{format_units, parse_ether},
+    types::{
+        Address, BlockId, BlockNumber, Bytes, CallConfig, DefaultFrame,
+        GethDebugBuiltInTracerConfig, GethDebugTracerConfig, GethDebugTracingCallOptions,
+        GethDebugTracingOptions, Log, NameOrAddress, StructLog, H256, U256, U64,
+    },
 };
 use eyre::Result;
-use std::convert::TryFrom;
 use std::process;
 use std::sync::Arc;
 
-use super::types::{SimulationParams, SimulationResults, BlockNumberType, Operation, TokenInfo, Standard};
-use super::constants::{CHECKED_TOPICS, APPROVAL, APPROVAL_FOR_ALL, TRANSFER, TRANSFER_SINGLE};
+use super::constants::{APPROVAL, APPROVAL_FOR_ALL, CHECKED_TOPICS, TRANSFER, TRANSFER_SINGLE};
+use super::types::{
+    BlockNumberType, Operation, SimulationResults, Standard, TokenInfo,
+};
 
+#[derive(Debug)]
+struct TraceLog {
+    struct_log: Vec<StructLog>,
+    call_stack: Vec<Vec<Address>>,
+}
 
 #[derive(Debug)]
 struct MyLog {
     address: Address,
     topics: Vec<H256>,
-    data: Bytes
+    data: Bytes,
 }
-
 
 fn u64_array_to_u8_array(input: [u64; 4]) -> [u8; 32] {
     let mut output = [0; 32];
@@ -40,20 +46,58 @@ fn u64_array_to_u8_array(input: [u64; 4]) -> [u8; 32] {
     output
 }
 
-pub async fn simulate(tx: TransactionRequest, provider: &Provider<Http>) -> Result<Vec<SimulationResults>> {
-    // let block = match simulation_params.block_number {
-    //     BlockNumberType::Past(n) => n,
-    //     BlockNumberType::Latest => provider.get_block_number().await.unwrap().as_u64()
-    // };
+fn u256_to_address(input: U256) -> Address {
+    Address::from(H256::from(u64_array_to_u8_array(input.0)))
+}
 
+fn write_to_output_file<T: std::fmt::Debug>(to_write: &T) {
+    // Specify the file path you want to write to
+    let file_path: &str = "output.txt";
+
+    // Open the file for writing (creates the file if it doesn't exist)
+    let mut file = std::fs::File::create(file_path).expect("failed to create file");
+
+    let st = format!("{:?}", to_write);
+
+    // Write the data to the file
+    std::io::Write::write_all(&mut file, st.as_bytes()).expect("failed to write to created file");
+}
+
+
+pub async fn simulate(
+    tx: TransactionRequest,
+    provider: &Provider<Http>,
+    block: BlockNumberType,
+) -> Result<Vec<SimulationResults>> {
+    let block = match block {
+        BlockNumberType::Past(num) => BlockId::Number(BlockNumber::Number(U64::from(num))),
+        BlockNumberType::Latest => BlockId::Number(BlockNumber::Latest),
+    };
     let mut tracing_options = GethDebugTracingOptions::default();
     tracing_options.enable_memory = Some(true);
+    tracing_options.tracer_config = Some(GethDebugTracerConfig::BuiltInTracer(
+        GethDebugBuiltInTracerConfig::CallTracer(CallConfig {
+            with_log: Some(true),
+            only_top_call: Some(false),
+        }),
+    ));
+
+    let to: Address = match tx.to.clone().unwrap() {
+        NameOrAddress::Address(a) => a,
+        NameOrAddress::Name(_) => {
+            println!("name unsupported");
+            process::exit(1);
+        }
+    };
 
     let tx_trace = provider
         .debug_trace_call(
             tx,
-            None, //Some(block.into()),
-            GethDebugTracingCallOptions { tracing_options, state_overrides: None },
+            Some(block),
+            GethDebugTracingCallOptions {
+                tracing_options,
+                state_overrides: None,
+            },
         )
         .await
         .unwrap_or_else(|e| {
@@ -61,53 +105,73 @@ pub async fn simulate(tx: TransactionRequest, provider: &Provider<Http>) -> Resu
             process::exit(1);
         });
 
-
     let x = match tx_trace {
-        ethers::types::GethTrace::Known(a) => {
-            match a {
-                ethers::types::GethTraceFrame::Default(b) => b,
-                _ => todo!()
-            }
+        ethers::types::GethTrace::Known(a) => match a {
+            ethers::types::GethTraceFrame::Default(b) => b,
+            _ => todo!(),
         },
-        _ => todo!()
+        _ => todo!(),
     };
 
+    let mut call_stack: Vec<Address> = vec![to];
+    let mut log_call_stack: Vec<Vec<Address>> = Vec::new();
 
-    let log_opcodes: Vec<StructLog> = x.struct_logs.into_iter().filter(|s| s.op == "LOG3").collect();
+    let log_opcodes: Vec<StructLog> = x
+        .struct_logs
+        .into_iter()
+        .filter(|s| {
+            // update call stack
+            match s.op.as_str() {
+                "CALL" | "STATICCALL" => {
+                    let stack = s.stack.as_ref().unwrap();
+                    call_stack.push(u256_to_address(stack[stack.len() - 2]));
+                    false
+                }
+                "RETURN" | "REVERT" | "STOP" => {
+                    call_stack.pop();
+                    false
+                }
+                "LOG3" => {
+                    log_call_stack.push(call_stack.clone());
+                    true
+                }
+                _ => false,
+            }
 
-    // Specify the file path you want to write to
-    let file_path: &str = "output.txt";
+            // s.op == "LOG3"
+        })
+        .collect();
 
-    // Open the file for writing (creates the file if it doesn't exist)
-    let mut file = std::fs::File::create(file_path)?;
+    let trace_log = TraceLog {
+        struct_log: log_opcodes,
+        call_stack: log_call_stack,
+    };
 
-    let st = format!("{:?}", &log_opcodes);
-
-    // Write the data to the file
-    std::io::Write::write_all(&mut file, st.as_bytes())?;
-
+    write_to_output_file(&trace_log);
 
     let mut logs: Vec<MyLog> = Vec::new();
-    for struct_log in log_opcodes.into_iter() {
+    for (index, struct_log) in trace_log.struct_log.into_iter().enumerate() {
         let stack = struct_log.stack.unwrap();
         let stack_length = stack.len();
 
         let memory = struct_log.memory.unwrap();
 
         // get data
-        let data_word_index = ((stack[stack_length - 1] / 32)).as_usize();
+        let data_word_index = (stack[stack_length - 1] / 32).as_usize();
         let data_offset = (stack[stack_length - 1] % 32).as_usize();
 
         let data_len = (stack[stack_length - 2]).as_usize();
 
-        let mut data:Vec<u8> = Vec::new();
-        
+        let mut data: Vec<u8> = Vec::new();
+
         let count = (data_len / 32) + 1;
         for i in 0..count {
             let to_push;
 
             if i == count - 1 {
-                if data_offset == 0 { break; }
+                if data_offset == 0 {
+                    break;
+                }
                 let x = memory[data_word_index + i].as_str();
                 to_push = &x[0..data_offset];
             } else {
@@ -117,22 +181,30 @@ pub async fn simulate(tx: TransactionRequest, provider: &Provider<Http>) -> Resu
             let y = u64_array_to_u8_array(U256::from_str_radix(to_push, 16).expect("aaa").0);
 
             data.append(&mut y.to_vec());
-        };
+        }
 
         // let data = Bytes::from(data.as_bytes().to_vec());
         let data = Bytes::from(data);
 
         // get 3 topics
-        let topics = vec![H256::from(u64_array_to_u8_array(stack[stack_length - 3].0)), H256::from(u64_array_to_u8_array(stack[stack_length - 4].0)), H256::from(u64_array_to_u8_array(stack[stack_length - 5].0))];
-        
-        let address = Address::zero();
+        let topics = vec![
+            H256::from(u64_array_to_u8_array(stack[stack_length - 3].0)),
+            H256::from(u64_array_to_u8_array(stack[stack_length - 4].0)),
+            H256::from(u64_array_to_u8_array(stack[stack_length - 5].0)),
+        ];
 
-        println!("{:?}", &data);
+        let address: Address = trace_log.call_stack[index][(struct_log.depth - 1) as usize];
 
-        logs.push(MyLog{address, topics, data});
+        // println!("{:?}", &data);
+
+        logs.push(MyLog {
+            address,
+            topics,
+            data,
+        });
     }
 
-    println!("{:?}", logs);
+    // println!("{:?}", logs);
 
     let mut simulated_infos: Vec<SimulationResults> = Vec::new();
 

@@ -1,4 +1,3 @@
-
 use ethers::{
     abi::{decode_whole, ParamType, Token},
     contract::Multicall,
@@ -11,15 +10,23 @@ use eyre::Result;
 use std::process;
 use std::sync::Arc;
 
-use super::types::{SimulationResults, Operation, TokenInfo, Standard};
-use super::constants::{CHECKED_TOPICS, APPROVAL, APPROVAL_FOR_ALL, TRANSFER, TRANSFER_SINGLE};
+use super::constants::{APPROVAL, APPROVAL_FOR_ALL, CHECKED_TOPICS, TRANSFER, TRANSFER_SINGLE};
+use super::types::{Operation, SimulationResults, Standard, TokenInfo};
 
-pub async fn simulate(tx: TransactionRequest, provider: &Provider<Http>) -> Result<Vec<SimulationResults>> {
+pub async fn simulate(
+    tx: TransactionRequest,
+    provider: &Provider<Http>,
+) -> Result<Vec<SimulationResults>> {
+    println!("cccc");
+
     // send tx
-    let pending_tx = provider.send_transaction(tx, None).await.unwrap_or_else(|e| {
-        eprintln!("transaction reverted with err: {}", e);
-        process::exit(1);
-    });
+    let pending_tx = provider
+        .send_transaction(tx, None)
+        .await
+        .unwrap_or_else(|e| {
+            eprintln!("transaction reverted with err: {}", e);
+            process::exit(1);
+        });
 
     // await and get receipt and tx
     let receipt = pending_tx
@@ -49,7 +56,6 @@ pub async fn simulate(tx: TransactionRequest, provider: &Provider<Http>) -> Resu
 
     Ok(simulated_infos)
 }
-
 
 async fn process_logs(log: Log, provider: Provider<Http>) -> Result<Option<SimulationResults>> {
     let topic0 = log.topics[0]
