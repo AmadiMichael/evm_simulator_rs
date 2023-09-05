@@ -1,9 +1,16 @@
 use ethers::{
-    types::{Address, Bytes, U256},
+    types::{Address, Bytes, H256, U256},
     utils::parse_ether,
 };
 use eyre::Result;
 use std::process;
+
+#[derive(Debug)]
+pub struct MyLog {
+    pub address: Address,
+    pub topics: Vec<H256>,
+    pub data: Bytes,
+}
 
 // Types
 #[derive(Debug, PartialEq)]

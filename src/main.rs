@@ -25,7 +25,7 @@ async fn main() -> Result<()> {
         simulation_params.block_number
     );
 
-    let sim_result = simulate(simulation_params).await?;
+    let sim_result = simulate(simulation_params, true).await?;
     let _ = print_result::print_result(sim_result);
 
     Ok(())
@@ -49,8 +49,9 @@ mod test {
         let value = "0".to_owned();
         let block_number = "17644319".to_owned();
         let rpc = "".to_owned();
+        let persist = "".to_owned();
 
-        vec![from, to, data, value, block_number, rpc]
+        vec![from, to, data, value, block_number, rpc, persist]
     }
 
     fn return_nft_test_case() -> Vec<String> {
@@ -62,8 +63,9 @@ mod test {
         let value = "0".to_owned();
         let block_number = "17673303".to_owned();
         let rpc = "".to_owned();
+        let persist = "".to_owned();
 
-        vec![from, to, data, value, block_number, rpc]
+        vec![from, to, data, value, block_number, rpc, persist]
     }
 
     #[tokio::test]
@@ -71,7 +73,7 @@ mod test {
         let args = return_erc20_test_case();
         let simulation_params = SimulationParams::new(&args)?;
 
-        let sim_result = simulate(simulation_params).await;
+        let sim_result = simulate(simulation_params, true).await;
         let sim_result = match sim_result {
             Ok(r) => r,
             Err(_) => return Err("Simulation failed".to_owned()),
@@ -149,7 +151,7 @@ mod test {
         let args = return_nft_test_case();
         let simulation_params = SimulationParams::new(&args)?;
 
-        let sim_result = simulate(simulation_params).await;
+        let sim_result = simulate(simulation_params, true).await;
         let sim_result = match sim_result {
             Ok(r) => r,
             Err(_) => return Err("Simulation failed".to_owned()),
