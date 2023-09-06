@@ -1,5 +1,3 @@
-//// Works for the most part but still WIP
-
 use ethers::{
     core::types::TransactionRequest,
     providers::{Http, Middleware, Provider},
@@ -14,6 +12,7 @@ use std::process;
 use super::process_logs::process_logs;
 use super::types::{BlockNumberType, MyLog, SimulationResults};
 use super::utils::{u256_to_address, u64_array_to_u8_array, write_to_output_file};
+use super::constants::PRECOMPILES;
 
 pub async fn simulate(
     tx: TransactionRequest,
@@ -67,8 +66,8 @@ pub async fn simulate(
         _ => todo!(),
     };
 
-    let mut call_stack: Vec<Address> = vec![to];
-    let mut log_call_stack: Vec<Vec<Address>> = Vec::new();
+    let mut cached_call_stack: Vec<Address> = vec![to];
+    let mut logs_call_stack: Vec<Vec<Address>> = Vec::new();
 
     let struct_logs: Vec<StructLog> = x
         .struct_logs
@@ -76,17 +75,22 @@ pub async fn simulate(
         .filter(|s| {
             // update call stack
             match s.op.as_str() {
-                "CALL" | "STATICCALL" | "CREATE" => {
+                "CALL" | "STATICCALL" => {
                     let stack = s.stack.as_ref().unwrap();
-                    call_stack.push(u256_to_address(stack[stack.len() - 2]));
+                    let called_address = stack[stack.len() - 2];
+
+                    if !PRECOMPILES.contains(&u64_array_to_u8_array(called_address.0)) {
+                        cached_call_stack.push(u256_to_address(called_address));
+                    }
+
                     false
                 }
                 "RETURN" | "REVERT" | "STOP" => {
-                    call_stack.pop();
+                    cached_call_stack.pop();
                     false
                 }
-                "LOG3" => {
-                    log_call_stack.push(call_stack.clone());
+                "LOG3" | "LOG4" => {
+                    logs_call_stack.push(cached_call_stack.clone());
                     true
                 }
                 _ => false,
@@ -94,7 +98,7 @@ pub async fn simulate(
         })
         .collect();
 
-    let v = struct_logs.into_iter().zip(log_call_stack);
+    let v = struct_logs.into_iter().zip(logs_call_stack);
 
     write_to_output_file(&v);
 
@@ -132,7 +136,6 @@ pub async fn simulate(
             data.append(&mut y.to_vec());
         }
 
-        // let data = Bytes::from(data.as_bytes().to_vec());
         let data = Bytes::from(data);
 
         // get 3 topics
@@ -140,6 +143,7 @@ pub async fn simulate(
             H256::from(u64_array_to_u8_array(stack[stack_length - 3].0)),
             H256::from(u64_array_to_u8_array(stack[stack_length - 4].0)),
             H256::from(u64_array_to_u8_array(stack[stack_length - 5].0)),
+            H256::from(u64_array_to_u8_array(stack[stack_length - 6].0)), // Only used if opcode == log4
         ];
 
         let address: Address = call_stack[(struct_log.depth - 1) as usize];
