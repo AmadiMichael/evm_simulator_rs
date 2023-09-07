@@ -11,7 +11,7 @@ use std::process;
 
 use super::process_logs::process_logs;
 use super::types::{BlockNumberType, MyLog, SimulationResults};
-use super::utils::{u256_to_address, u64_array_to_u8_array, write_to_output_file};
+use super::utils::{u256_to_address, u64_array_to_u8_array /*, write_to_output_file */ };
 use super::constants::PRECOMPILES;
 
 pub async fn simulate(
@@ -98,12 +98,10 @@ pub async fn simulate(
         })
         .collect();
 
-    let v = struct_logs.into_iter().zip(logs_call_stack);
-
-    write_to_output_file(&v);
+    let struct_logs_and_their_call_stack = struct_logs.into_iter().zip(logs_call_stack);
 
     let mut logs: Vec<MyLog> = Vec::new();
-    for (struct_log, call_stack) in v {
+    for (struct_log, call_stack) in struct_logs_and_their_call_stack {
         let stack = struct_log.stack.unwrap();
         let stack_length = stack.len();
 
@@ -154,8 +152,6 @@ pub async fn simulate(
             data,
         });
     }
-
-    // println!("{:?}", logs);
 
     let mut simulated_infos: Vec<SimulationResults> = Vec::new();
 

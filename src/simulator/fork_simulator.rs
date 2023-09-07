@@ -12,8 +12,6 @@ pub async fn simulate(
     tx: TransactionRequest,
     provider: &Provider<Http>,
 ) -> Result<Vec<SimulationResults>> {
-    println!("cccc");
-
     // send tx
     let pending_tx = provider
         .send_transaction(tx, None)
