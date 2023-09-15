@@ -9,10 +9,10 @@ use ethers::{
 use eyre::Result;
 use std::process;
 
+use super::constants::PRECOMPILES;
 use super::process_logs::process_logs;
 use super::types::{BlockNumberType, MyLog, SimulationResults};
-use super::utils::{u256_to_address, u64_array_to_u8_array /*, write_to_output_file */ };
-use super::constants::PRECOMPILES;
+use super::utils::{u256_to_address, u64_array_to_u8_array /*, write_to_output_file */};
 
 pub async fn simulate(
     tx: TransactionRequest,

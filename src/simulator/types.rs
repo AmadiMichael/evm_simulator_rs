@@ -24,8 +24,9 @@ pub enum Operation {
 
 #[derive(Debug, PartialEq)]
 pub enum Standard {
-    // This is mostly to specify eip1155 contracts but can be expanded to specify eip20 and 721 contracts later
-    NONE,
+    None,
+    Eip20,
+    Eip721,
     Eip1155,
 }
 

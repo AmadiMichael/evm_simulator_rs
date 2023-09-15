@@ -24,8 +24,9 @@ pub async fn process_logs(
     if CHECKED_TOPICS.contains(&topic0) {
         let amount: U256;
         let id: Option<U256>;
+        let standard: Standard;
 
-        if log.data.len() > 32 {
+        if log.data.len() == 64 {
             let decoded =
                 match decode_whole(&[ParamType::Uint(256), ParamType::Uint(256)], &log.data) {
                     Ok(x) => x,
@@ -41,7 +42,8 @@ pub async fn process_logs(
                     process::exit(1);
                 }
             };
-        } else {
+            standard = Standard::Eip1155;
+        } else if log.data.len() == 32 {
             let decoded = match decode_whole(&[ParamType::Uint(256)], &log.data) {
                 Ok(x) => x,
                 Err(err) => {
@@ -57,11 +59,29 @@ pub async fn process_logs(
                 }
             };
             id = None;
-        }
 
-        let (name, symbol, decimals) = get_token_name_and_symbol(log.address, provider).await?;
+            standard = match &topic0 {
+                &APPROVAL => Standard::Eip20,
+                &TRANSFER => Standard::Eip20,
+                &APPROVAL_FOR_ALL => Standard::Eip721,
+                _ => Standard::None,
+            }
+        } else {
+            amount = U256::from(1);
 
-        match_simulation_result(topic0, name, symbol, decimals, amount, id, log)
+            let d: &[u8] = log.topics[3]
+                .as_bytes()
+                .try_into()
+                .expect("could not convert topic4 into a uint8 array");
+            id = Some(U256::from(d));
+
+            standard = Standard::Eip721;
+        };
+
+        let (name, symbol, decimals) =
+            get_token_name_and_symbol(log.address, provider, &standard).await?;
+
+        match_simulation_result(topic0, name, symbol, decimals, amount, id, log, standard)
     } else {
         Ok(None)
     }
@@ -75,12 +95,13 @@ fn match_simulation_result(
     amount: U256,
     id: Option<U256>,
     log: MyLog,
+    standard: Standard,
 ) -> Result<Option<SimulationResults>> {
     match topic0 {
         APPROVAL => Ok(Some(SimulationResults {
             operation: Operation::Approval,
             token_info: TokenInfo {
-                standard: Standard::NONE,
+                standard,
                 name,
                 symbol,
                 decimals,
@@ -94,7 +115,7 @@ fn match_simulation_result(
         TRANSFER => Ok(Some(SimulationResults {
             operation: Operation::Transfer,
             token_info: TokenInfo {
-                standard: Standard::NONE,
+                standard,
                 name,
                 symbol,
                 decimals,
@@ -108,7 +129,7 @@ fn match_simulation_result(
         APPROVAL_FOR_ALL => Ok(Some(SimulationResults {
             operation: Operation::ApprovalForAll,
             token_info: TokenInfo {
-                standard: Standard::NONE,
+                standard,
                 name,
                 symbol,
                 decimals,
@@ -122,7 +143,7 @@ fn match_simulation_result(
         TRANSFER_SINGLE => Ok(Some(SimulationResults {
             operation: Operation::TransferSingle,
             token_info: TokenInfo {
-                standard: Standard::Eip1155,
+                standard,
                 name,
                 symbol,
                 decimals,
@@ -136,7 +157,7 @@ fn match_simulation_result(
         _ => Ok(Some(SimulationResults {
             operation: Operation::TransferBatch,
             token_info: TokenInfo {
-                standard: Standard::Eip1155,
+                standard,
                 name,
                 symbol,
                 decimals,
@@ -153,6 +174,7 @@ fn match_simulation_result(
 async fn get_token_name_and_symbol(
     address: Address,
     provider: Provider<Http>,
+    standard: &Standard,
 ) -> Result<(String, String, U256)> {
     abigen!(
         TokenInstance,
@@ -166,21 +188,57 @@ async fn get_token_name_and_symbol(
     let client = Arc::new(provider);
     let token_instance = TokenInstance::new(address, client.clone());
 
-    let name = token_instance.method::<_, String>("name", ())?;
-    let symbol = token_instance.method::<_, String>("symbol", ())?;
-    let decimals = token_instance.method::<_, U256>("decimals", ())?;
+    let name_fn = token_instance.method::<_, String>("name", ())?;
+    let symbol_fn = token_instance.method::<_, String>("symbol", ())?;
+    let decimals_fn = token_instance.method::<_, U256>("decimals", ())?;
 
     let mut multicall = Multicall::new(client, None).await?;
-    multicall
-        .add_call(name, true)
-        .add_call(symbol, true)
-        .add_call(decimals, true);
 
-    // `await`ing on the `call` method lets us fetch the return values of both the above calls in one single RPC call
-    let (name, symbol, decimals): (String, String, U256) = match multicall.call().await {
-        Ok((a, b, c)) => (a, b, c),
-        Err(_) => ("".to_owned(), "".to_owned(), U256::from_dec_str("0")?),
-    };
-
+    let name: String;
+    let symbol: String;
+    let decimals: U256;
+    match standard {
+        Standard::Eip20 => {
+            multicall
+                .add_call(name_fn, true)
+                .add_call(symbol_fn, true)
+                .add_call(decimals_fn, true);
+            // `await`ing on the `call` method lets us fetch the return values of both the above calls in one single RPC call
+            (name, symbol, decimals) = match multicall.call().await {
+                Ok((a, b, c)) => (a, b, c),
+                Err(_) => ("".to_owned(), "".to_owned(), U256::from_dec_str("0")?),
+            };
+        }
+        Standard::Eip721 => {
+            multicall.add_call(name_fn, true).add_call(symbol_fn, true);
+            // `await`ing on the `call` method lets us fetch the return values of both the above calls in one single RPC call
+            (name, symbol) = match multicall.call().await {
+                Ok((a, b)) => (a, b),
+                Err(_) => ("".to_owned(), "".to_owned()),
+            };
+            decimals = U256::from_dec_str("0")?;
+        }
+        Standard::Eip1155 => {
+            multicall.add_call(name_fn, true);
+            // `await`ing on the `call` method lets us fetch the return values of both the above calls in one single RPC call
+            (name) = match multicall.call().await {
+                Ok(a) => a,
+                Err(_) => "".to_owned(),
+            };
+            symbol = "".to_owned();
+            decimals = U256::from_dec_str("0")?;
+        }
+        Standard::None => {
+            multicall
+                .add_call(name_fn, true)
+                .add_call(symbol_fn, true)
+                .add_call(decimals_fn, true);
+            // `await`ing on the `call` method lets us fetch the return values of both the above calls in one single RPC call
+            (name, symbol, decimals) = match multicall.call().await {
+                Ok((a, b, c)) => (a, b, c),
+                Err(_) => ("".to_owned(), "".to_owned(), U256::from_dec_str("0")?),
+            }
+        }
+    }
     Ok((name, symbol, decimals))
 }

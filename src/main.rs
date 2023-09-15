@@ -82,7 +82,7 @@ mod test {
             SimulationResults {
                 operation: Operation::Transfer,
                 token_info: TokenInfo {
-                    standard: Standard::NONE,
+                    standard: Standard::Eip20,
                     address: "0xe30bbec87855c8710729e6b8384ef9783c76379c"
                         .parse::<Address>()
                         .unwrap(),
@@ -102,7 +102,7 @@ mod test {
             SimulationResults {
                 operation: Operation::Approval,
                 token_info: TokenInfo {
-                    standard: Standard::NONE,
+                    standard: Standard::Eip20,
                     address: "0xe30bbec87855c8710729e6b8384ef9783c76379c"
                         .parse::<Address>()
                         .unwrap(),
@@ -122,7 +122,7 @@ mod test {
             SimulationResults {
                 operation: Operation::Transfer,
                 token_info: TokenInfo {
-                    standard: Standard::NONE,
+                    standard: Standard::Eip20,
                     address: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
                         .parse::<Address>()
                         .unwrap(),
@@ -160,7 +160,7 @@ mod test {
             SimulationResults {
                 operation: Operation::Transfer,
                 token_info: TokenInfo {
-                    standard: Standard::NONE,
+                    standard: Standard::Eip20,
                     address: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
                         .parse::<Address>()
                         .unwrap(),
@@ -200,7 +200,7 @@ mod test {
             SimulationResults {
                 operation: Operation::Transfer,
                 token_info: TokenInfo {
-                    standard: Standard::NONE,
+                    standard: Standard::Eip20,
                     address: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
                         .parse::<Address>()
                         .unwrap(),
